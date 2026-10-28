@@ -1,45 +1,11 @@
 import { maplibregl } from './map-core.js';
 import { emodnetWms } from './config.js';
+import { contourThreshold, filterContours } from './contour-model.js';
 
 const SOURCE = 'adaptive-contours-source';
 const LINE = 'adaptive-contours-line';
 const FALLBACK_SOURCE = 'contours-fallback-source';
 const FALLBACK_LAYER = 'contours-fallback-layer';
-const DEPTHS = new Set([50, 100, 200, 500, 1000, 2000, 5000]);
-
-export function contourThreshold(zoom) {
-  if (zoom < 5) return Infinity;
-  if (zoom < 6.2) return 1000;
-  if (zoom < 7.6) return 500;
-  if (zoom < 9) return 200;
-  if (zoom < 10.5) return 100;
-  return 50;
-}
-
-function depthFromProperties(properties = {}) {
-  const preferred = ['Elevation', 'elevation', 'Depth', 'depth', 'Contour', 'contour', 'value', 'VALUE'];
-  for (const key of preferred) {
-    const value = Math.abs(Number(properties[key]));
-    if (Number.isFinite(value) && DEPTHS.has(value)) return value;
-  }
-  for (const value of Object.values(properties)) {
-    const depth = Math.abs(Number(value));
-    if (Number.isFinite(depth) && DEPTHS.has(depth)) return depth;
-  }
-  return NaN;
-}
-
-export function filterContours(featureCollection, zoom) {
-  const threshold = contourThreshold(zoom);
-  return {
-    type: 'FeatureCollection',
-    features: (featureCollection?.features ?? []).flatMap(feature => {
-      const depth = depthFromProperties(feature.properties);
-      if (!Number.isFinite(depth) || depth < threshold) return [];
-      return [{ ...feature, properties: { ...feature.properties, _depth: depth } }];
-    })
-  };
-}
 
 function featureMidpoint(feature) {
   const geometry = feature?.geometry;
@@ -99,7 +65,6 @@ export class AdaptiveContours {
     ];
 
     this.onStatus('Loading adaptive EMODnet isobaths…');
-    let lastError;
     for (const url of urls) {
       try {
         const response = await fetch(url, { signal: this.abortController.signal, headers: { Accept: 'application/json' } });
@@ -109,12 +74,11 @@ export class AdaptiveContours {
         return;
       } catch (error) {
         if (error.name === 'AbortError') return;
-        lastError = error;
       }
     }
 
     this._renderFallback();
-    this.onStatus(`WFS unavailable; WMS fallback active${lastError ? '' : ''}`);
+    this.onStatus('WFS unavailable; WMS fallback active');
   }
 
   _renderVector() {
