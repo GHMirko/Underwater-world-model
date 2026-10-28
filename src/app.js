@@ -225,9 +225,12 @@ document.querySelector('#contourDensity').addEventListener('change', event => {
 
 document.querySelector('#mission').addEventListener('change', event => patchState({ mission: event.target.value }));
 
-document.querySelector('#environmentPanel').addEventListener('change', event => {
-  if (event.target.id !== 'buildEnvRequest') invalidateEnvRequest();
-});
+const environmentPanel = document.querySelector('#environmentPanel');
+const invalidateOnEnvironmentalEdit = event => {
+  if (event.target.matches('input, select')) invalidateEnvRequest();
+};
+environmentPanel.addEventListener('input', invalidateOnEnvironmentalEdit);
+environmentPanel.addEventListener('change', invalidateOnEnvironmentalEdit);
 
 document.querySelector('#buildEnvRequest').addEventListener('click', () => {
   const status = document.querySelector('#envRequestStatus');
