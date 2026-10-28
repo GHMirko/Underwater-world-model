@@ -5,6 +5,9 @@ import { AoiController } from './map/aoi-controller.js';
 import { AdaptiveContours } from './map/adaptive-contours.js';
 import { renderDepthLegend } from './map/depth-legend.js';
 import { sampleAoiBathymetry } from './data/emodnet.js';
+import { DEFAULT_ENVIRONMENT_SELECTION, ENVIRONMENT_VARIABLES } from './data/source-registry.js';
+import { buildCopernicusPython, buildEnvironmentalRequest } from './data/environmental-request.js';
+import { downloadJson, downloadText } from './data/download.js';
 import { ASSETS, DEFAULT_WEIGHTS, optimize } from './optimizer/core.js';
 import { state, patchState } from './state.js';
 
@@ -13,7 +16,7 @@ root.innerHTML = `
 <div class="app">
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
-    <span class="badge">GitHub v0.8 cartography</span>
+    <span class="badge">GitHub v0.9 Data Broker</span>
     <span class="badge">MapLibre bundled</span>
     <span class="badge">Regression-safe modules</span>
   </header>
@@ -53,6 +56,28 @@ root.innerHTML = `
         <div class="field"><label>Max operating depth (m)</label><input id="maxDepth" type="number" value="500" min="0"></div>
       </div>
 
+      <div class="panel" id="environmentPanel">
+        <h2>Environmental Data Request</h2>
+        <div class="row">
+          <div class="field"><label>Start UTC</label><input id="envStart" type="datetime-local" step="3600"></div>
+          <div class="field"><label>End UTC</label><input id="envEnd" type="datetime-local" step="3600"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label>Min depth (m)</label><input id="envMinDepth" type="number" min="0" value="0"></div>
+          <div class="field"><label>Max depth (m)</label><input id="envMaxDepth" type="number" min="1" value="500"></div>
+        </div>
+        <div class="field"><label>Extract for AOI</label><div id="envVariables" class="env-vars"></div></div>
+        <button id="buildEnvRequest" class="btn primary" style="width:100%">Build Environmental Data Request</button>
+        <div id="envRequestStatus" class="status">Select an AOI, time/depth window and variables.</div>
+        <div class="request-actions">
+          <button id="downloadManifest" class="btn" disabled>Manifest JSON</button>
+          <button id="downloadAoi" class="btn" disabled>AOI GeoJSON</button>
+          <button id="downloadCopernicus" class="btn" disabled>Copernicus job</button>
+          <a id="openBathymetry" class="btn btn-link disabled-link" target="_blank" rel="noreferrer">EMODnet bathy</a>
+        </div>
+        <div class="data-note">REAL gate remains OPEN until source jobs are executed and validated. Copernicus credentials are never stored in the browser.</div>
+      </div>
+
       <div class="panel">
         <h2>Assets</h2>
         <div id="assets" class="assets"></div>
@@ -72,9 +97,44 @@ const contours = new AdaptiveContours(map, message => {
   document.querySelector('#contourStatus').textContent = message;
 });
 const legendEl = document.querySelector('#depthLegend');
+let currentEnvRequest = null;
 
 function updateLegend() {
   renderDepthLegend(legendEl, state.bathyMode, state.bathymetry);
+}
+
+function utcInputValue(date) {
+  return date.toISOString().slice(0, 16);
+}
+
+const initialStart = new Date();
+initialStart.setUTCMinutes(0, 0, 0);
+const initialEnd = new Date(initialStart.getTime() + 24 * 3600 * 1000);
+document.querySelector('#envStart').value = utcInputValue(initialStart);
+document.querySelector('#envEnd').value = utcInputValue(initialEnd);
+
+document.querySelector('#envVariables').innerHTML = DEFAULT_ENVIRONMENT_SELECTION.map(id => {
+  const variable = ENVIRONMENT_VARIABLES[id];
+  return `<label><input type="checkbox" value="${id}" checked> <span><b>${variable.label}</b><small>${variable.provider}</small></span></label>`;
+}).join('');
+
+function setRequestButtons(enabled) {
+  document.querySelector('#downloadManifest').disabled = !enabled;
+  document.querySelector('#downloadAoi').disabled = !enabled;
+  document.querySelector('#downloadCopernicus').disabled = !enabled;
+  const bathy = document.querySelector('#openBathymetry');
+  if (!enabled) {
+    bathy.removeAttribute('href');
+    bathy.classList.add('disabled-link');
+  }
+}
+
+function invalidateEnvRequest(message = 'AOI or request parameters changed. Build the Environmental Data Request again.') {
+  currentEnvRequest = null;
+  setRequestButtons(false);
+  const status = document.querySelector('#envRequestStatus');
+  status.textContent = message;
+  status.className = 'status';
 }
 
 function updateAoiStatus(aoi) {
@@ -92,6 +152,7 @@ async function onAoiChanged(aoi) {
   patchState({ aoi, bathymetry: null });
   updateAoiStatus(aoi);
   updateLegend();
+  invalidateEnvRequest(aoi ? 'AOI defined. Configure environmental request and build it.' : 'Select an AOI first.');
   if (!aoi) return;
   const status = document.querySelector('#bathyStatus');
   status.textContent = 'Retrieving numeric EMODnet bathymetry…';
@@ -125,6 +186,7 @@ document.querySelector('#clearAoi').addEventListener('click', () => {
   patchState({ aoi: null, bathymetry: null });
   updateAoiStatus(null);
   updateLegend();
+  invalidateEnvRequest('Select an AOI first.');
   document.querySelector('#bathyStatus').textContent = 'Bathymetry will be sampled automatically after AOI selection.';
 });
 
@@ -163,6 +225,57 @@ document.querySelector('#contourDensity').addEventListener('change', event => {
 
 document.querySelector('#mission').addEventListener('change', event => patchState({ mission: event.target.value }));
 
+const environmentPanel = document.querySelector('#environmentPanel');
+const invalidateOnEnvironmentalEdit = event => {
+  if (event.target.matches('input, select')) invalidateEnvRequest();
+};
+environmentPanel.addEventListener('input', invalidateOnEnvironmentalEdit);
+environmentPanel.addEventListener('change', invalidateOnEnvironmentalEdit);
+
+document.querySelector('#buildEnvRequest').addEventListener('click', () => {
+  const status = document.querySelector('#envRequestStatus');
+  try {
+    const variables = [...document.querySelectorAll('#envVariables input:checked')].map(input => input.value);
+    currentEnvRequest = buildEnvironmentalRequest({
+      aoi: state.aoi,
+      startDatetime: document.querySelector('#envStart').value,
+      endDatetime: document.querySelector('#envEnd').value,
+      minDepth: Number(document.querySelector('#envMinDepth').value),
+      maxDepth: Number(document.querySelector('#envMaxDepth').value),
+      variables
+    });
+    const copernicus = currentEnvRequest.source_jobs.filter(job => job.provider === 'Copernicus Marine').length;
+    const publicOgc = currentEnvRequest.source_jobs.filter(job => job.execution === 'PUBLIC_OGC').length;
+    const discovery = currentEnvRequest.source_jobs.filter(job => job.execution === 'CAPABILITY_DISCOVERY_REQUIRED').length;
+    status.textContent = `SOURCE-RESOLVED · ${variables.length} variables · ${currentEnvRequest.source_jobs.length} jobs · Copernicus ${copernicus} backend · public OGC ${publicOgc}${discovery ? ` · discovery ${discovery}` : ''}`;
+    status.className = 'status good';
+    setRequestButtons(true);
+    const bathyJob = currentEnvRequest.source_jobs.find(job => job.id === 'emodnet-bathymetry');
+    const bathyLink = document.querySelector('#openBathymetry');
+    if (bathyJob) {
+      bathyLink.href = bathyJob.request_url;
+      bathyLink.classList.remove('disabled-link');
+    }
+  } catch (error) {
+    currentEnvRequest = null;
+    setRequestButtons(false);
+    status.textContent = error.message;
+    status.className = 'status warn';
+  }
+});
+
+document.querySelector('#downloadManifest').addEventListener('click', () => {
+  if (currentEnvRequest) downloadJson('environmental-request.json', currentEnvRequest);
+});
+
+document.querySelector('#downloadAoi').addEventListener('click', () => {
+  if (currentEnvRequest) downloadJson('aoi.geojson', currentEnvRequest.geometry);
+});
+
+document.querySelector('#downloadCopernicus').addEventListener('click', () => {
+  if (currentEnvRequest) downloadText('copernicus_subset.py', buildCopernicusPython(currentEnvRequest), 'text/x-python;charset=utf-8');
+});
+
 document.querySelector('#assets').innerHTML = ASSETS.map(asset => `
 <label><input type="checkbox" value="${asset.id}" checked> <span><b>${asset.id}</b> · ${asset.type} · ${asset.maxDepth} m · ${asset.speed} kt · ${asset.endurance} h</span></label>
 `).join('');
@@ -194,4 +307,5 @@ document.querySelector('#optimize').addEventListener('click', () => {
 });
 
 updateLegend();
-window.__MSO__ = { map, layers, contours, aoi, state, updateLegend };
+setRequestButtons(false);
+window.__MSO__ = { map, layers, contours, aoi, state, updateLegend, buildEnvironmentalRequest };

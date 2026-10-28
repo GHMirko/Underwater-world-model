@@ -21,13 +21,14 @@ async function drawAoi(page, from = { x: 180, y: 180 }, to = { x: 430, y: 360 })
   await expect(page.locator('#aoiStatus')).not.toContainText('No AOI selected');
 }
 
-test('critical flow survives map/layer changes and external network failure', async ({ page }) => {
+test('critical flow survives map/layer/data-request changes and external network failure', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
   await expect(page.locator('#bathyMode')).toHaveValue('chart-relief');
   await expect(page.locator('#contourDensity')).toHaveValue('dense');
   await expect(page.locator('#depthLegend')).toContainText('Depth shading');
+  await expect(page.locator('#downloadManifest')).toBeDisabled();
 
   await drawAoi(page);
   await page.locator('#clearAoi').click();
@@ -43,6 +44,21 @@ test('critical flow survives map/layer changes and external network failure', as
 
   await drawAoi(page, { x: 220, y: 220 }, { x: 500, y: 390 });
   await expect(page.locator('#bathyStatus')).toContainText(/Numeric bathymetry unavailable|REAL EMODnet/);
+
+  await expect(page.locator('#envVariables input:checked')).toHaveCount(5);
+  await page.locator('#buildEnvRequest').click();
+  await expect(page.locator('#envRequestStatus')).toContainText('SOURCE-RESOLVED');
+  await expect(page.locator('#envRequestStatus')).toContainText('5 jobs');
+  await expect(page.locator('#downloadManifest')).toBeEnabled();
+  await expect(page.locator('#downloadAoi')).toBeEnabled();
+  await expect(page.locator('#downloadCopernicus')).toBeEnabled();
+  await expect(page.locator('#openBathymetry')).toHaveAttribute('href', /ows\.emodnet-bathymetry\.eu\/wcs/);
+
+  await page.locator('#envMaxDepth').fill('800');
+  await expect(page.locator('#downloadManifest')).toBeDisabled();
+  await expect(page.locator('#envRequestStatus')).toContainText('changed');
+  await page.locator('#buildEnvRequest').click();
+  await expect(page.locator('#envRequestStatus')).toContainText('SOURCE-RESOLVED');
 
   await page.locator('#optimize').click();
   await expect(page.locator('#results .result').first()).toBeVisible();
