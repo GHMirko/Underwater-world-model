@@ -16,7 +16,10 @@ export const CHART_RELIEF_STOPS = Object.freeze(WATER_STOPS.map(stop => Object.f
 export function chartReliefExpression() {
   const LSB = 1 / 256;
   const expression = ['interpolate', ['linear'], ['elevation']];
-  [...CHART_RELIEF_STOPS].reverse().forEach(({ depth, color }) => expression.push(-depth, color));
+  [...CHART_RELIEF_STOPS]
+    .filter(stop => stop.depth > 0)
+    .reverse()
+    .forEach(({ depth, color }) => expression.push(-depth, color));
   expression.push(
     -LSB, '#f8fdff',
     0, '#9dcbe8',
