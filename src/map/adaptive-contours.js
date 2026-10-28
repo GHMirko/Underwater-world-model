@@ -1,11 +1,13 @@
 import { maplibregl } from './map-core.js';
-import { emodnetWms } from './config.js';
+import { SEASCAPE_VECTOR, emodnetWms } from './config.js';
 import { contourThreshold, filterContours } from './contour-model.js';
 
 const SOURCE = 'adaptive-contours-source';
 const LINE = 'adaptive-contours-line';
 const FALLBACK_SOURCE = 'contours-fallback-source';
 const FALLBACK_LAYER = 'contours-fallback-layer';
+const DENSE_SOURCE = 'dense-isobaths-source';
+const DENSE_LINE = 'dense-isobaths-line';
 
 function featureMidpoint(feature) {
   const geometry = feature?.geometry;
@@ -21,6 +23,7 @@ export class AdaptiveContours {
     this.map = map;
     this.onStatus = onStatus;
     this.visible = true;
+    this.density = 'dense';
     this.raw = null;
     this.abortController = null;
     this.markers = [];
@@ -41,6 +44,13 @@ export class AdaptiveContours {
     this.refresh();
   }
 
+  setDensity(density) {
+    this.density = density === 'major' ? 'major' : 'dense';
+    if (!this.visible) return;
+    if (this.density === 'major') this._removeDense();
+    this.refresh();
+  }
+
   async refresh() {
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this._refreshNow(), 200);
@@ -48,10 +58,14 @@ export class AdaptiveContours {
 
   async _refreshNow() {
     if (!this.visible || !this.map.isStyleLoaded()) return;
+    this._renderDense();
+
     const zoom = this.map.getZoom();
     if (zoom < 5) {
       this._renderFallback();
-      this.onStatus('Low zoom: EMODnet WMS isobath overview');
+      this.onStatus(this.density === 'dense'
+        ? 'Dense chart isobaths active · low zoom EMODnet overview'
+        : 'Low zoom: EMODnet WMS isobath overview');
       return;
     }
 
@@ -64,7 +78,10 @@ export class AdaptiveContours {
       `https://ows.emodnet-bathymetry.eu/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=emodnet:contours&outputFormat=application/json&srsName=EPSG:4326&count=5000&bbox=${bbox},EPSG:4326`
     ];
 
-    this.onStatus('Loading adaptive EMODnet isobaths…');
+    this.onStatus(this.density === 'dense'
+      ? 'Dense chart isobaths active · loading EMODnet major labels…'
+      : 'Loading adaptive EMODnet isobaths…');
+
     for (const url of urls) {
       try {
         const response = await fetch(url, { signal: this.abortController.signal, headers: { Accept: 'application/json' } });
@@ -78,7 +95,35 @@ export class AdaptiveContours {
     }
 
     this._renderFallback();
-    this.onStatus('WFS unavailable; WMS fallback active');
+    this.onStatus(this.density === 'dense'
+      ? 'Dense chart isobaths active · EMODnet major WMS fallback'
+      : 'WFS unavailable; WMS fallback active');
+  }
+
+  _renderDense() {
+    if (this.density !== 'dense' || !this.map.isStyleLoaded()) {
+      this._removeDense();
+      return;
+    }
+    if (this.map.getSource(DENSE_SOURCE)) return;
+    this.map.addSource(DENSE_SOURCE, {
+      type: 'vector',
+      url: SEASCAPE_VECTOR
+    });
+    this.map.addLayer({
+      id: DENSE_LINE,
+      type: 'line',
+      source: DENSE_SOURCE,
+      'source-layer': 'contours',
+      minzoom: 4,
+      filter: ['any', ['!', ['has', 'sys']], ['==', ['get', 'sys'], 'm']],
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: {
+        'line-color': '#315c75',
+        'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0.45, 8, 0.6, 11, 0.85, 14, 1.05],
+        'line-opacity': 0.72
+      }
+    });
   }
 
   _renderVector() {
@@ -93,13 +138,14 @@ export class AdaptiveContours {
         source: SOURCE,
         paint: {
           'line-color': '#f5fbff',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.8, 10, 1.5, 13, 2],
-          'line-opacity': 0.9
+          'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.9, 10, 1.6, 13, 2.1],
+          'line-opacity': 0.95
         }
       });
     }
     this._renderLabels(filtered);
-    this.onStatus(`Adaptive isobaths: ${filtered.features.length} features · ${this.markers.length} labels · ≥ ${contourThreshold(this.map.getZoom())} m`);
+    const prefix = this.density === 'dense' ? 'Dense chart + EMODnet major' : 'EMODnet major';
+    this.onStatus(`${prefix}: ${filtered.features.length} major features · ${this.markers.length} labels · ≥ ${contourThreshold(this.map.getZoom())} m`);
   }
 
   _renderLabels(filtered) {
@@ -144,9 +190,15 @@ export class AdaptiveContours {
     if (this.map.getSource(SOURCE)) this.map.removeSource(SOURCE);
   }
 
+  _removeDense() {
+    if (this.map.getLayer(DENSE_LINE)) this.map.removeLayer(DENSE_LINE);
+    if (this.map.getSource(DENSE_SOURCE)) this.map.removeSource(DENSE_SOURCE);
+  }
+
   _removeAll() {
     this._clearVector();
     this._removeFallback();
+    this._removeDense();
   }
 
   _clearMarkers() {

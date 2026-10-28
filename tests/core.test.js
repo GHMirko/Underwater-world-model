@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { aoiToGeoJSON } from '../src/map/aoi-controller.js';
 import { contourThreshold, filterContours } from '../src/map/contour-model.js';
+import { chartReliefExpression, legendModel } from '../src/map/depth-legend.js';
 import { ASSETS, areaKm2, combinations, dominates, optimize } from '../src/optimizer/core.js';
 
 test('AOI converts to a closed polygon', () => {
@@ -55,4 +56,18 @@ test('contour filter keeps only depths allowed at current zoom', () => {
   };
   const filtered = filterContours(fc, 8);
   assert.deepEqual(filtered.features.map(feature => feature.properties._depth), [200, 500, 1000]);
+});
+
+test('chart relief elevation stops are strictly ascending', () => {
+  const expression = chartReliefExpression();
+  const elevations = [];
+  for (let i = 3; i < expression.length; i += 2) elevations.push(expression[i]);
+  for (let i = 1; i < elevations.length; i += 1) assert.ok(elevations[i] > elevations[i - 1]);
+});
+
+test('chart relief legend is quantitative and reports real AOI range', () => {
+  const legend = legendModel('chart-relief', { min: 42.2, max: 1180.8 });
+  assert.equal(legend.quantitative, true);
+  assert.equal(legend.ticks[0], '0');
+  assert.match(legend.range, /42–1181 m/);
 });

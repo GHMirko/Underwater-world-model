@@ -5,6 +5,7 @@ test.beforeEach(async ({ page }) => {
   await page.route(/^https?:\/\/(?!127\.0\.0\.1:4173).*/, route => route.abort());
   await page.goto('/Underwater-world-model/');
   await expect(page.locator('#map')).toBeVisible();
+  await expect(page.locator('#depthLegend')).toBeVisible();
   await page.waitForTimeout(800);
 });
 
@@ -24,12 +25,19 @@ test('critical flow survives map/layer changes and external network failure', as
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
+  await expect(page.locator('#bathyMode')).toHaveValue('chart-relief');
+  await expect(page.locator('#contourDensity')).toHaveValue('dense');
+  await expect(page.locator('#depthLegend')).toContainText('Depth shading');
+
   await drawAoi(page);
   await page.locator('#clearAoi').click();
   await expect(page.locator('#aoiStatus')).toContainText('No AOI selected');
 
   await page.locator('#baseMap').selectOption('satellite');
   await page.locator('#bathyMode').selectOption('emodnet-multicolour');
+  await expect(page.locator('#depthLegend')).toContainText('EMODnet depth');
+  await page.locator('#contourDensity').selectOption('major');
+  await page.locator('#contourDensity').selectOption('dense');
   await page.locator('#contours').uncheck();
   await page.locator('#contours').check();
 
