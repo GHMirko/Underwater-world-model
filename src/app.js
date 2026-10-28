@@ -3,6 +3,7 @@ import { createMap, setBaseMap } from './map/map-core.js';
 import { LayerManager } from './map/layer-manager.js';
 import { AoiController } from './map/aoi-controller.js';
 import { AdaptiveContours } from './map/adaptive-contours.js';
+import { renderDepthLegend } from './map/depth-legend.js';
 import { sampleAoiBathymetry } from './data/emodnet.js';
 import { ASSETS, DEFAULT_WEIGHTS, optimize } from './optimizer/core.js';
 import { state, patchState } from './state.js';
@@ -12,12 +13,15 @@ root.innerHTML = `
 <div class="app">
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
-    <span class="badge">GitHub baseline v0.7</span>
+    <span class="badge">GitHub v0.8 cartography</span>
     <span class="badge">MapLibre bundled</span>
     <span class="badge">Regression-safe modules</span>
   </header>
   <div class="workspace">
-    <section class="map-wrap"><div id="map" class="map"></div></section>
+    <section class="map-wrap">
+      <div id="map" class="map"></div>
+      <div id="depthLegend" class="depth-legend" aria-live="polite"></div>
+    </section>
     <aside class="sidebar">
       <div class="panel">
         <h2>Map</h2>
@@ -25,10 +29,15 @@ root.innerHTML = `
           <option value="chart">Chart</option><option value="satellite">Satellite</option><option value="terrain">Terrain</option><option value="minimal">Minimal</option>
         </select></div>
         <div class="field"><label>Bathymetry</label><select id="bathyMode">
+          <option value="chart-relief">Chart Relief · dynamic</option>
           <option value="emodnet-rainbow">EMODnet Rainbow</option><option value="emodnet-multicolour">EMODnet Multicolour</option><option value="emodnet-atlas">EMODnet Atlas</option><option value="gebco-relief">GEBCO Relief</option><option value="none">None</option>
         </select></div>
-        <div class="field"><label>Bathymetry opacity</label><input id="depthOpacity" type="range" min="0" max="100" value="64"></div>
+        <div class="field"><label>Bathymetry opacity</label><input id="depthOpacity" type="range" min="0" max="100" value="72"></div>
         <label><input id="contours" type="checkbox" checked> Adaptive isobaths</label>
+        <div class="field"><label>Isobath density</label><select id="contourDensity">
+          <option value="dense">Dense chart + EMODnet major</option>
+          <option value="major">EMODnet major only</option>
+        </select></div>
         <div id="contourStatus" class="status">Waiting for map…</div>
       </div>
 
@@ -62,6 +71,11 @@ const layers = new LayerManager(map);
 const contours = new AdaptiveContours(map, message => {
   document.querySelector('#contourStatus').textContent = message;
 });
+const legendEl = document.querySelector('#depthLegend');
+
+function updateLegend() {
+  renderDepthLegend(legendEl, state.bathyMode, state.bathymetry);
+}
 
 function updateAoiStatus(aoi) {
   const el = document.querySelector('#aoiStatus');
@@ -77,6 +91,7 @@ function updateAoiStatus(aoi) {
 async function onAoiChanged(aoi) {
   patchState({ aoi, bathymetry: null });
   updateAoiStatus(aoi);
+  updateLegend();
   if (!aoi) return;
   const status = document.querySelector('#bathyStatus');
   status.textContent = 'Retrieving numeric EMODnet bathymetry…';
@@ -86,9 +101,11 @@ async function onAoiChanged(aoi) {
     patchState({ bathymetry });
     status.textContent = `REAL EMODnet · ${bathymetry.samples}/9 · mean ${bathymetry.mean.toFixed(1)} m · σ ${bathymetry.sd.toFixed(1)} m`;
     status.className = 'status good';
+    updateLegend();
   } catch (error) {
     status.textContent = 'Numeric bathymetry unavailable. Visual layers remain active; optimizer uses SURROGATE fallback.';
     status.className = 'status warn';
+    updateLegend();
   }
 }
 
@@ -107,6 +124,7 @@ document.querySelector('#clearAoi').addEventListener('click', () => {
   aoi.clear();
   patchState({ aoi: null, bathymetry: null });
   updateAoiStatus(null);
+  updateLegend();
   document.querySelector('#bathyStatus').textContent = 'Bathymetry will be sampled automatically after AOI selection.';
 });
 
@@ -114,6 +132,7 @@ map.on('mouseup', () => document.querySelector('#drawAoi').classList.remove('act
 
 map.on('load', () => {
   layers.restore();
+  contours.setDensity(state.contourDensity);
   contours.refresh();
 });
 
@@ -125,6 +144,7 @@ document.querySelector('#baseMap').addEventListener('change', event => {
 document.querySelector('#bathyMode').addEventListener('change', event => {
   patchState({ bathyMode: event.target.value });
   layers.setBathymetry(event.target.value);
+  updateLegend();
 });
 
 document.querySelector('#depthOpacity').addEventListener('input', event => {
@@ -134,6 +154,11 @@ document.querySelector('#depthOpacity').addEventListener('input', event => {
 document.querySelector('#contours').addEventListener('change', event => {
   patchState({ contours: event.target.checked });
   contours.setVisible(event.target.checked);
+});
+
+document.querySelector('#contourDensity').addEventListener('change', event => {
+  patchState({ contourDensity: event.target.value });
+  contours.setDensity(event.target.value);
 });
 
 document.querySelector('#mission').addEventListener('change', event => patchState({ mission: event.target.value }));
@@ -168,4 +193,5 @@ document.querySelector('#optimize').addEventListener('click', () => {
     <small>${item.provenance}</small></div>`).join('') : '<div class="status warn">No feasible candidate.</div>';
 });
 
-window.__MSO__ = { map, layers, contours, aoi, state };
+updateLegend();
+window.__MSO__ = { map, layers, contours, aoi, state, updateLegend };
