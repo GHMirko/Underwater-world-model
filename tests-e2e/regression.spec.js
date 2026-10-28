@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.beforeEach(async ({ page }) => {
   page.on('pageerror', error => console.error('PAGE ERROR', error));
   await page.route(/^https?:\/\/(?!127\.0\.0\.1:4173).*/, route => route.abort());
-  await page.goto('/');
+  await page.goto('/Underwater-world-model/');
   await expect(page.locator('#map')).toBeVisible();
   await page.waitForTimeout(800);
 });
