@@ -21,7 +21,11 @@ export const BASEMAPS = {
   }
 };
 
+export const SEASCAPE_RASTER = 'https://tiles.openwaters.io/seascape/raster.json';
+export const SEASCAPE_VECTOR = 'https://tiles.openwaters.io/seascape/vector.json';
+
 export const BATHYMETRY = {
+  'chart-relief': { name: 'Chart Relief · dynamic', layer: 'depth-relief', provider: 'seascape' },
   'emodnet-rainbow': { name: 'EMODnet Rainbow', layer: 'emodnet:mean_rainbowcolour', provider: 'emodnet' },
   'emodnet-multicolour': { name: 'EMODnet Multicolour', layer: 'emodnet:mean_multicolour', provider: 'emodnet' },
   'emodnet-atlas': { name: 'EMODnet Atlas', layer: 'emodnet:mean_atlas_land', provider: 'emodnet' },
