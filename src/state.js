@@ -3,8 +3,9 @@ export const state = {
   aoi: null,
   bathymetry: null,
   baseMap: 'chart',
-  bathyMode: 'emodnet-rainbow',
+  bathyMode: 'chart-relief',
   contours: true,
+  contourDensity: 'dense',
   assets: new Set(['SIM-UUV-A', 'SIM-UUV-B', 'SIM-USV-GW', 'SIM-GLIDER'])
 };
 
