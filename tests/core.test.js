@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { aoiToGeoJSON } from '../src/map/aoi-controller.js';
 import { contourThreshold, filterContours } from '../src/map/contour-model.js';
 import { chartReliefExpression, legendModel } from '../src/map/depth-legend.js';
+import { buildCopernicusPython, buildEmodnetBathymetryUrl, buildEnvironmentalRequest, estimateBathymetryCells } from '../src/data/environmental-request.js';
+import { ENVIRONMENT_VARIABLES } from '../src/data/source-registry.js';
 import { ASSETS, areaKm2, combinations, dominates, optimize } from '../src/optimizer/core.js';
 
 test('AOI converts to a closed polygon', () => {
@@ -70,4 +72,53 @@ test('chart relief legend is quantitative and reports real AOI range', () => {
   assert.equal(legend.quantitative, true);
   assert.equal(legend.ticks[0], '0');
   assert.match(legend.range, /42–1181 m/);
+});
+
+test('environment registry maps Mediterranean 3D hourly temperature salinity and currents', () => {
+  assert.equal(ENVIRONMENT_VARIABLES.temperature.datasetId, 'cmems_mod_med_phy-tem_anfc_4.2km-3D_PT1H-m');
+  assert.equal(ENVIRONMENT_VARIABLES.salinity.datasetId, 'cmems_mod_med_phy-sal_anfc_4.2km-3D_PT1H-m');
+  assert.equal(ENVIRONMENT_VARIABLES.currents.datasetId, 'cmems_mod_med_phy-cur_anfc_4.2km-3D_PT1H-m');
+  assert.deepEqual(ENVIRONMENT_VARIABLES.currents.variables, ['uo', 'vo']);
+});
+
+test('environmental request resolves source jobs and plans sound speed only from T and S', () => {
+  const request = buildEnvironmentalRequest({
+    aoi: { minLon: 15, maxLon: 16, minLat: 38, maxLat: 39 },
+    startDatetime: '2026-10-28T16:00',
+    endDatetime: '2026-10-29T16:00',
+    minDepth: 0,
+    maxDepth: 500,
+    variables: ['temperature', 'salinity', 'currents', 'bathymetry', 'seabed_substrate']
+  });
+  assert.equal(request.source_jobs.length, 5);
+  assert.deepEqual(request.bbox, [15, 38, 16, 39]);
+  assert.equal(request.package_plan.gridded, 'environment.nc');
+  assert.equal(request.package_plan.seabedVector, 'seabed.geojson');
+  assert.equal(request.derived_products[0].id, 'sound_speed');
+  assert.equal(request.validation.environmental_state_real, false);
+});
+
+test('EMODnet bathymetry job is a numeric WCS subset and grid estimate is bounded', () => {
+  const aoi = { minLon: 15, maxLon: 15.1, minLat: 38, maxLat: 38.1 };
+  const url = buildEmodnetBathymetryUrl(aoi);
+  assert.match(url, /coverage=emodnet%3Amean/);
+  assert.match(url, /BBOX=15%2C38%2C15.1%2C38.1/);
+  const grid = estimateBathymetryCells(aoi);
+  assert.ok(grid.cells > 0);
+  assert.ok(grid.cells < 20000);
+});
+
+test('generated Copernicus worker script contains no credentials and uses resolved datasets', () => {
+  const request = buildEnvironmentalRequest({
+    aoi: { minLon: 15, maxLon: 16, minLat: 38, maxLat: 39 },
+    startDatetime: '2026-10-28T16:00',
+    endDatetime: '2026-10-29T16:00',
+    minDepth: 0,
+    maxDepth: 300,
+    variables: ['temperature', 'salinity', 'currents']
+  });
+  const script = buildCopernicusPython(request);
+  assert.match(script, /copernicusmarine\.subset/);
+  assert.match(script, /cmems_mod_med_phy-tem_anfc_4\.2km-3D_PT1H-m/);
+  assert.doesNotMatch(script.toLowerCase(), /password|username|token/);
 });
