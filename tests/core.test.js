@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { aoiToGeoJSON } from '../src/map/aoi-controller.js';
-import { contourThreshold, filterContours } from '../src/map/adaptive-contours.js';
+import { contourThreshold, filterContours } from '../src/map/contour-model.js';
 import { ASSETS, areaKm2, combinations, dominates, optimize } from '../src/optimizer/core.js';
 
 test('AOI converts to a closed polygon', () => {
