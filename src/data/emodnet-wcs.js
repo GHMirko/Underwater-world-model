@@ -23,8 +23,11 @@ function finiteDepth(value, noData) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return null;
   if (Number.isFinite(noData) && Math.abs(numeric - noData) < 1e-9) return null;
-  const depth = Math.abs(numeric);
-  return depth > 0.01 && depth < 12000 ? depth : null;
+  // EMODnet DTM convention is positive-down depth. Do not use abs(): doing so
+  // can silently turn an opposite-sign/topographic value into plausible water depth.
+  // Zero is retained because LAT/intertidal/shallow-water cells can legitimately
+  // approach 0 m and are separated from land by the explicit no-land water mask.
+  return numeric >= 0 && numeric < 12000 ? numeric : null;
 }
 
 export function rasterToBathymetryGrid({ values, width, height, bbox, noData = NaN }) {
