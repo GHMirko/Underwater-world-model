@@ -20,8 +20,27 @@ export function chooseContourScheme(minDepth, maxDepth, targetLines = 8) {
     const rounded = Number(value.toFixed(interval < 1 ? 2 : interval < 10 ? 1 : 0));
     const majorRatio = rounded / majorInterval;
     const major = Math.abs(majorRatio - Math.round(majorRatio)) < 1e-6;
-    levels.push({ depth_m: rounded, major });
+    levels.push({ depth_m: rounded, major, shallow_priority: false });
   }
+
+  // Coastal/shallow-water mission planning benefits from retaining 2 m and 5 m
+  // information even when the overall AOI span would otherwise choose 10 m or
+  // coarser contours. These are display/derived levels only; they do not imply
+  // finer native bathymetric resolution.
+  if (min < 6 && max <= 80 && interval >= 5) {
+    for (const shallow of [2, 5]) {
+      if (shallow < min - 1e-9 || shallow > max + 1e-9) continue;
+      if (!levels.some(level => Math.abs(level.depth_m - shallow) < 1e-9)) {
+        levels.push({ depth_m: shallow, major: shallow === 5, shallow_priority: true });
+      } else {
+        const existing = levels.find(level => Math.abs(level.depth_m - shallow) < 1e-9);
+        existing.shallow_priority = true;
+        if (shallow === 5) existing.major = true;
+      }
+    }
+    levels.sort((a, b) => a.depth_m - b.depth_m);
+  }
+
   return { interval_m: interval, major_interval_m: majorInterval, levels };
 }
 
@@ -97,6 +116,7 @@ function propertySet(levelInfo, metadata, derivation) {
   return {
     depth_m: levelInfo.depth_m,
     major: Boolean(levelInfo.major),
+    shallow_priority: Boolean(levelInfo.shallow_priority),
     layer_class: 'DERIVED',
     derivation,
     source: metadata.source ?? 'UNKNOWN',
@@ -106,7 +126,8 @@ function propertySet(levelInfo, metadata, derivation) {
     coverage_ratio: metadata.coverage_ratio ?? null,
     estimated_horizontal_uncertainty_m: metadata.estimated_horizontal_uncertainty_m ?? null,
     fitness_for_use: Array.isArray(metadata.fitness_for_use) ? metadata.fitness_for_use.join(',') : metadata.fitness_for_use ?? null,
-    valid_until: metadata.valid_until ?? null
+    valid_until: metadata.valid_until ?? null,
+    coastal_mask: metadata.coastal_mask ?? null
   };
 }
 

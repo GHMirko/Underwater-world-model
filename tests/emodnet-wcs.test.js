@@ -38,6 +38,23 @@ test('GeoTIFF raster cells become georeferenced numeric bathymetry samples', () 
   assert.equal(grid.samples.at(-1).depth, 24);
 });
 
+test('positive-down semantics retain zero-depth shallow cells and reject opposite-sign values', () => {
+  const grid = rasterToBathymetryGrid({
+    values: new Float32Array([
+      0, 0.4, 1.8,
+      -3, -9999, 6,
+      2, 4, 8
+    ]),
+    width: 3,
+    height: 3,
+    bbox: [9.0, 44.0, 9.003, 44.003],
+    noData: -9999
+  });
+  assert.ok(grid.samples.some(sample => sample.depth === 0));
+  assert.ok(grid.samples.some(sample => Math.abs(sample.depth - 0.4) < 1e-6));
+  assert.ok(!grid.samples.some(sample => sample.depth === 3));
+});
+
 test('shallow WCS grid can derive local contours below the official 50 m contour product', () => {
   const grid = rasterToBathymetryGrid({
     values: new Float32Array([
@@ -55,4 +72,11 @@ test('shallow WCS grid can derive local contours below the official 50 m contour
   assert.ok(scheme.levels.some(level => level.depth_m < 50));
   assert.ok(contours.features.length > 0);
   assert.ok(contours.features.every(feature => feature.properties.depth_m < 50));
+});
+
+test('wide shallow AOI retains 2 m and 5 m priority contours even with 10 m main spacing', () => {
+  const scheme = chooseContourScheme(0.2, 52.8);
+  assert.equal(scheme.interval_m, 10);
+  assert.ok(scheme.levels.some(level => level.depth_m === 2 && level.shallow_priority));
+  assert.ok(scheme.levels.some(level => level.depth_m === 5 && level.shallow_priority));
 });

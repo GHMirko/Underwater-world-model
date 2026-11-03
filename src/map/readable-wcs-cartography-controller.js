@@ -3,6 +3,7 @@ import { stitchContourSegments } from './contour-quality.js';
 import { maplibregl } from './map-core.js';
 
 const GRID_LAYER = 'aoi-wcs-grid-layer';
+const COASTAL_LAYER = 'aoi-wcs-coastal-layer';
 const CONTOUR_SOURCE = 'aoi-derived-contours-source';
 const CONTOUR_LAYER = 'aoi-derived-contours-layer';
 const CASING_LAYER = 'aoi-readable-contours-casing';
@@ -45,6 +46,11 @@ function injectCss() {
       box-shadow:0 1px 3px rgba(0,0,0,.34);
       transform:translateZ(0);
     }
+    .wcs-readable-label.shallow{
+      color:#493700;
+      background:rgba(255,248,199,.95);
+      border-color:rgba(116,91,0,.72);
+    }
   `;
   document.head.appendChild(style);
 }
@@ -74,7 +80,7 @@ function ensureCasing(map) {
       },
       paint: {
         'line-color': 'rgba(7,25,35,.88)',
-        'line-width': ['case', ['==', ['get', 'major'], true], 4.8, 3.0],
+        'line-width': ['case', ['==', ['get', 'major'], true], 4.8, ['==', ['get', 'shallow_priority'], true], 4.1, 3.0],
         'line-opacity': 0.82,
         'line-blur': 0.15
       }
@@ -89,10 +95,11 @@ function styleLayers(map) {
     map.setPaintProperty(GRID_LAYER, 'fill-antialias', false);
     map.setPaintProperty(GRID_LAYER, 'fill-opacity', effectiveGridOpacity());
   }
+  if (map.getLayer(COASTAL_LAYER)) {
+    map.setPaintProperty(COASTAL_LAYER, 'circle-stroke-width', 0.7);
+    map.setPaintProperty(COASTAL_LAYER, 'circle-stroke-color', 'rgba(238,250,255,.88)');
+  }
 
-  // This controller only owns the contour presentation while the WCS raster
-  // is authoritative. REST/recovery contour visibility remains controlled by
-  // the existing quality controller and must not be overridden here.
   if (!active()) {
     if (map.getLayer(CASING_LAYER)) map.setLayoutProperty(CASING_LAYER, 'visibility', 'none');
     return;
@@ -108,8 +115,18 @@ function styleLayers(map) {
   map.setFilter(CONTOUR_LAYER, filter);
   map.setLayoutProperty(CONTOUR_LAYER, 'line-cap', 'round');
   map.setLayoutProperty(CONTOUR_LAYER, 'line-join', 'round');
-  map.setPaintProperty(CONTOUR_LAYER, 'line-color', ['case', ['==', ['get', 'major'], true], '#ffffff', '#d7f4ff']);
-  map.setPaintProperty(CONTOUR_LAYER, 'line-width', ['case', ['==', ['get', 'major'], true], 2.5, 1.35]);
+  map.setPaintProperty(CONTOUR_LAYER, 'line-color', [
+    'case',
+    ['==', ['get', 'shallow_priority'], true], '#fff0a8',
+    ['==', ['get', 'major'], true], '#ffffff',
+    '#d7f4ff'
+  ]);
+  map.setPaintProperty(CONTOUR_LAYER, 'line-width', [
+    'case',
+    ['==', ['get', 'major'], true], 2.5,
+    ['==', ['get', 'shallow_priority'], true], 2.0,
+    1.35
+  ]);
   map.setPaintProperty(CONTOUR_LAYER, 'line-opacity', ['case', ['==', ['get', 'major'], true], 1.0, 0.92]);
 }
 
@@ -130,12 +147,16 @@ function candidatePoints(feature) {
   return fractions.map(fraction => line[Math.max(0, Math.min(line.length - 1, Math.round((line.length - 1) * fraction)))]);
 }
 
-function labelDepths(depths) {
-  const sorted = [...depths].sort((a, b) => a - b);
-  if (sorted.length <= 4) return new Set(sorted);
-  // With dense 5 m contours, label alternate levels. The line geometry still
-  // carries every level; labels are deliberately sparse for readability.
-  return new Set(sorted.filter((_, index) => index % 2 === 1));
+function labelDepths(grouped) {
+  const depths = [...grouped.keys()].sort((a, b) => a - b);
+  const wanted = new Set();
+  for (const depth of depths) {
+    const features = grouped.get(depth) ?? [];
+    if (features.some(feature => feature.properties?.shallow_priority)) wanted.add(depth);
+  }
+  if (depths.length <= 4) depths.forEach(depth => wanted.add(depth));
+  else depths.filter((_, index) => index % 2 === 1).forEach(depth => wanted.add(depth));
+  return wanted;
 }
 
 function collides(point, occupied) {
@@ -155,7 +176,7 @@ function renderLabels(map) {
     grouped.get(depth).push(feature);
   }
 
-  const wanted = labelDepths(grouped.keys());
+  const wanted = labelDepths(grouped);
   const occupied = [];
   const canvas = map.getCanvas();
   const width = canvas.clientWidth;
@@ -173,9 +194,12 @@ function renderLabels(map) {
         if (collides(pixel, occupied)) continue;
 
         const element = document.createElement('div');
-        element.className = 'wcs-readable-label';
+        const shallow = Boolean(feature.properties?.shallow_priority);
+        element.className = `wcs-readable-label${shallow ? ' shallow' : ''}`;
         element.textContent = `${depth} m`;
-        element.title = 'Derived from EMODnet WCS numeric DTM; visual label only';
+        element.title = shallow
+          ? 'Shallow-priority derived contour; native WCS resolution and coastal uncertainty still apply'
+          : 'Derived from EMODnet WCS numeric DTM; visual label only';
         markers.push(new maplibregl.Marker({ element, anchor: 'center' }).setLngLat(lngLat).addTo(map));
         occupied.push(pixel);
         placed = true;
@@ -194,7 +218,7 @@ function apply(map) {
     styleLayers(map);
     renderLabels(map);
     const badge = document.querySelector('.header .badge');
-    if (badge) badge.textContent = 'GitHub v0.17.1 Readable WCS Cartography';
+    if (badge) badge.textContent = 'GitHub v0.17.2 Coastal Mask + Shallow Water';
   } finally {
     applying = false;
   }
