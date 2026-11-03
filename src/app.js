@@ -212,7 +212,8 @@ function renderBathymetryBroker() {
   status.className = 'status good';
   list.innerHTML = summary.map((item, index) => {
     const res = Number.isFinite(item.resolution_m) ? `~${formatMeters(item.resolution_m)}` : 'metadata/variable';
-    return `<div class="source-candidate ${item.use_class.toLowerCase()}"><b>${index + 1}. ${item.label}</b><span>${item.use_class} · ${item.availability} · ${item.applicability} · ${res}</span></div>`;
+    const link = item.metadata_url ? `<a class="source-link" href="${item.metadata_url}" target="_blank" rel="noreferrer">catalog</a>` : '';
+    return `<div class="source-candidate ${item.use_class.toLowerCase()}"><b>${index + 1}. ${item.label}</b><span>${item.use_class} · ${item.availability} · ${item.applicability} · ${res} ${link}</span></div>`;
   }).join('');
   button.disabled = false;
 }
