@@ -40,7 +40,4 @@ subscribeState((next, patch) => {
 
 map.on('style.load', schedule);
 
-const badge = document.querySelector('.header .badge');
-if (badge) badge.textContent = 'GitHub v0.16 Confidence-Aware Contours · v0.16.2 · v0.17 WCS';
-
 schedule();
