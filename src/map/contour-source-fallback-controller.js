@@ -66,9 +66,6 @@ function applyContourSourcePolicy() {
     return;
   }
 
-  // Best-available-information policy: context remains authoritative until the
-  // local numeric contour layer has enough spatial support to be operationally
-  // readable. Sparse fragments are not promoted merely because feature_count > 0.
   contextFallback = true;
   contourEngine.setBathymetryMode('emodnet-rainbow');
   contourEngine.setDensity(state.contourDensity);
@@ -100,6 +97,6 @@ subscribeState((next, patch) => {
 });
 
 const badge = document.querySelector('.header .badge');
-if (badge) badge.textContent = 'GitHub v0.16.2 Contour Quality Gate';
+if (badge) badge.textContent = 'GitHub v0.16 Confidence-Aware Contours · v0.16.2';
 
 applyContourSourcePolicy();
