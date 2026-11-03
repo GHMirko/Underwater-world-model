@@ -13,7 +13,7 @@ export function chooseContourScheme(minDepth, maxDepth, targetLines = 8) {
   const span = max - min;
   const raw = span / Math.max(3, targetLines);
   const interval = NICE_INTERVALS.find(value => value >= raw) ?? NICE_INTERVALS.at(-1);
-  const majorInterval = interval < 1 ? interval * 5 : interval < 10 ? interval * 5 : interval * 5;
+  const majorInterval = interval * 5;
   const first = Math.ceil(min / interval) * interval;
   const levels = [];
   for (let value = first; value <= max + interval * 1e-6 && levels.length < 40; value += interval) {
@@ -93,6 +93,44 @@ function segmentPairs(caseIndex, centerHigh) {
   return lookup[caseIndex] ?? [];
 }
 
+function propertySet(levelInfo, metadata, derivation) {
+  return {
+    depth_m: levelInfo.depth_m,
+    major: Boolean(levelInfo.major),
+    layer_class: 'DERIVED',
+    derivation,
+    source: metadata.source ?? 'UNKNOWN',
+    native_resolution_m: metadata.native_resolution_m ?? null,
+    confidence: metadata.confidence ?? 'UNKNOWN',
+    confidence_score: metadata.confidence_score ?? null,
+    coverage_ratio: metadata.coverage_ratio ?? null,
+    estimated_horizontal_uncertainty_m: metadata.estimated_horizontal_uncertainty_m ?? null,
+    fitness_for_use: Array.isArray(metadata.fitness_for_use) ? metadata.fitness_for_use.join(',') : metadata.fitness_for_use ?? null,
+    valid_until: metadata.valid_until ?? null
+  };
+}
+
+function samePoint(a, b) {
+  return Math.abs(a[0] - b[0]) < 1e-10 && Math.abs(a[1] - b[1]) < 1e-10;
+}
+
+function triangleCrossing(points, level) {
+  const intersections = [];
+  const edges = [[0, 1], [1, 2], [2, 0]];
+  for (const [ia, ib] of edges) {
+    const a = points[ia];
+    const b = points[ib];
+    const da = a.depth - level;
+    const db = b.depth - level;
+    if (Math.abs(da) < 1e-12 && Math.abs(db) < 1e-12) continue;
+    if ((da <= 0 && db >= 0) || (da >= 0 && db <= 0)) {
+      const point = interpolatePoint(a, b, level);
+      if (!intersections.some(existing => samePoint(existing, point))) intersections.push(point);
+    }
+  }
+  return intersections.length >= 2 ? [intersections[0], intersections[1]] : null;
+}
+
 export function buildAdaptiveContours({ samples, nx, ny, scheme, metadata = {} }) {
   if (!Array.isArray(samples) || nx < 2 || ny < 2 || !scheme?.levels?.length) {
     return { type: 'FeatureCollection', features: [] };
@@ -112,39 +150,44 @@ export function buildAdaptiveContours({ samples, nx, ny, scheme, metadata = {} }
         const p10 = grid[iy][ix + 1];
         const p11 = grid[iy + 1][ix + 1];
         const p01 = grid[iy + 1][ix];
-        if (![p00, p10, p11, p01].every(point => point && Number.isFinite(point.depth))) continue;
+        const corners = [p00, p10, p11, p01];
+        const validCorners = corners.filter(point => point && Number.isFinite(point.depth));
 
-        const caseIndex = (p00.depth >= level ? 1 : 0)
-          | (p10.depth >= level ? 2 : 0)
-          | (p11.depth >= level ? 4 : 0)
-          | (p01.depth >= level ? 8 : 0);
-        if (caseIndex === 0 || caseIndex === 15) continue;
+        if (validCorners.length === 4) {
+          const caseIndex = (p00.depth >= level ? 1 : 0)
+            | (p10.depth >= level ? 2 : 0)
+            | (p11.depth >= level ? 4 : 0)
+            | (p01.depth >= level ? 8 : 0);
+          if (caseIndex === 0 || caseIndex === 15) continue;
 
-        const edges = [
-          interpolatePoint(p00, p10, level),
-          interpolatePoint(p10, p11, level),
-          interpolatePoint(p11, p01, level),
-          interpolatePoint(p01, p00, level)
-        ];
-        const centerDepth = (p00.depth + p10.depth + p11.depth + p01.depth) / 4;
-        for (const [a, b] of segmentPairs(caseIndex, centerDepth >= level)) {
+          const edges = [
+            interpolatePoint(p00, p10, level),
+            interpolatePoint(p10, p11, level),
+            interpolatePoint(p11, p01, level),
+            interpolatePoint(p01, p00, level)
+          ];
+          const centerDepth = (p00.depth + p10.depth + p11.depth + p01.depth) / 4;
+          for (const [a, b] of segmentPairs(caseIndex, centerDepth >= level)) {
+            features.push({
+              type: 'Feature',
+              properties: propertySet(levelInfo, metadata, 'MARCHING_SQUARES_NUMERIC_GRID'),
+              geometry: { type: 'LineString', coordinates: [edges[a], edges[b]] }
+            });
+          }
+          continue;
+        }
+
+        // Coastal/no-data cells often retain three trustworthy water samples but
+        // not a complete square. Triangulating only those observed vertices gives
+        // a conservative local contour without synthesising a fourth land/no-data
+        // depth. This is explicitly tagged as sparse-grid derivation.
+        if (validCorners.length === 3) {
+          const segment = triangleCrossing(validCorners, level);
+          if (!segment) continue;
           features.push({
             type: 'Feature',
-            properties: {
-              depth_m: level,
-              major: Boolean(levelInfo.major),
-              layer_class: 'DERIVED',
-              derivation: 'MARCHING_SQUARES_NUMERIC_GRID',
-              source: metadata.source ?? 'UNKNOWN',
-              native_resolution_m: metadata.native_resolution_m ?? null,
-              confidence: metadata.confidence ?? 'UNKNOWN',
-              confidence_score: metadata.confidence_score ?? null,
-              coverage_ratio: metadata.coverage_ratio ?? null,
-              estimated_horizontal_uncertainty_m: metadata.estimated_horizontal_uncertainty_m ?? null,
-              fitness_for_use: Array.isArray(metadata.fitness_for_use) ? metadata.fitness_for_use.join(',') : metadata.fitness_for_use ?? null,
-              valid_until: metadata.valid_until ?? null
-            },
-            geometry: { type: 'LineString', coordinates: [edges[a], edges[b]] }
+            properties: propertySet(levelInfo, metadata, 'TRIANGULATED_SPARSE_NUMERIC_GRID'),
+            geometry: { type: 'LineString', coordinates: segment }
           });
         }
       }
@@ -156,6 +199,7 @@ export function buildAdaptiveContours({ samples, nx, ny, scheme, metadata = {} }
 export function contourSummary(featureCollection, scheme, quality) {
   const features = featureCollection?.features ?? [];
   const levels = [...new Set(features.map(feature => feature.properties?.depth_m).filter(Number.isFinite))].sort((a, b) => a - b);
+  const derivations = [...new Set(features.map(feature => feature.properties?.derivation).filter(Boolean))];
   return {
     feature_count: features.length,
     levels_m: levels,
@@ -165,6 +209,6 @@ export function contourSummary(featureCollection, scheme, quality) {
     confidence_score: quality?.confidence_score ?? null,
     coverage_ratio: quality?.coverage_ratio ?? null,
     fitness_for_use: quality?.fitness_for_use ?? [],
-    derivation: 'MARCHING_SQUARES_NUMERIC_GRID'
+    derivation: derivations.length === 1 ? derivations[0] : derivations.length > 1 ? 'MIXED_NUMERIC_GRID_CONTOURS' : 'NO_LOCAL_CONTOURS'
   };
 }
