@@ -16,25 +16,33 @@ export const BASEMAPS = {
 export const SEASCAPE_RASTER = 'https://tiles.openwaters.io/seascape/raster.json';
 export const SEASCAPE_VECTOR = 'https://tiles.openwaters.io/seascape/vector.json';
 
-// Land/background and sea data are intentionally independent. The client viewer
-// exposes only basemaps that remain useful at micro-AOI scale; bathymetry is
-// always rendered as a separate sea-data layer.
+// Land/background and sea data are intentionally independent. Client-facing
+// micro-AOI bathymetry defaults to numeric AOI samples rather than a WMS colour
+// raster, because the WMS can paint no-data/shore cells over a high-resolution
+// land basemap. WMS products remain optional context layers only.
 export const BATHYMETRY = {
+  'aoi-adaptive': {
+    name: 'AOI REAL · adaptive range',
+    layer: null,
+    provider: 'emodnet-numeric',
+    contourFamily: 'none',
+    numeric: true
+  },
   'chart-relief': {
-    name: 'Chart Relief · sea-only',
+    name: 'Chart Relief · context only',
     layer: 'depth-relief',
     provider: 'seascape',
     contourFamily: 'seascape',
     visualFallback: 'emodnet-multicolour'
   },
   'emodnet-rainbow': {
-    name: 'EMODnet Rainbow · sea-only',
+    name: 'EMODnet Rainbow · context WMS',
     layer: 'emodnet:mean_rainbowcolour',
     provider: 'emodnet',
     contourFamily: 'emodnet'
   },
   'emodnet-multicolour': {
-    name: 'EMODnet Multicolour · sea-only',
+    name: 'EMODnet Multicolour · context WMS',
     layer: 'emodnet:mean_multicolour',
     provider: 'emodnet',
     contourFamily: 'emodnet'
