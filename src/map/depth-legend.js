@@ -64,6 +64,13 @@ const MODE_LEGENDS = {
     ticks: ['shallow', '', '', '', '', '', 'deep'],
     quantitative: false
   },
+  'gebco-global': {
+    title: 'GEBCO 2026 global context',
+    subtitle: 'GEBCO_Latest_2 WMS · visual context only · global 15 arc-second grid',
+    colors: ['#d9f0ff', '#9ecae1', '#6baed6', '#3182bd', '#08519c'],
+    ticks: ['shallow', '', '', '', 'deep'],
+    quantitative: false
+  },
   'emodnet-multicolour': {
     title: 'EMODnet context depth',
     subtitle: 'multicolour WMS · context only · native grid ~115 m',
