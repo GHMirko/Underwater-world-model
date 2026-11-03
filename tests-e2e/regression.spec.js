@@ -21,7 +21,7 @@ async function drawAoi(page, from = { x: 180, y: 180 }, to = { x: 430, y: 360 })
   await expect(page.locator('#aoiStatus')).not.toContainText('No AOI selected');
 }
 
-test('critical flow preserves land basemap, source-matches isobaths and auto-fits micro-AOI', async ({ page }) => {
+test('critical flow preserves map, resolves bathymetry fallback and auto-fits micro-AOI', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
@@ -32,6 +32,7 @@ test('critical flow preserves land basemap, source-matches isobaths and auto-fit
   await expect(page.locator('#contourDensity')).toHaveValue('dense');
   await expect(page.locator('#depthLegend')).toContainText('Depth shading');
   await expect(page.locator('#depthLegend')).toContainText('visual gap-fill');
+  await expect(page.locator('#bathySourceStatus')).toContainText('define an AOI');
   await expect(page.locator('#downloadManifest')).toBeDisabled();
 
   const maxZoom = await page.evaluate(() => window.__MSO__.map.getMaxZoom());
@@ -46,6 +47,9 @@ test('critical flow preserves land basemap, source-matches isobaths and auto-fit
   await expect(page.locator('#fitAoi')).toBeEnabled();
   await expect(page.locator('#spatialAdequacy')).toContainText('UNRESOLVED');
   await expect(page.locator('#spatialAdequacy')).toContainText('COARSE');
+  await expect(page.locator('#bathySourceStatus')).toContainText('standard EMODnet DTM ~115 m fallback');
+  const sourceStatus = await page.evaluate(() => window.__MSO__.state.bathymetrySource?.status);
+  expect(sourceStatus).toBe('STANDARD_FALLBACK');
   await page.waitForTimeout(650);
   const zoomAfterAoi = await page.evaluate(() => window.__MSO__.map.getZoom());
   expect(zoomAfterAoi).toBeGreaterThanOrEqual(zoomBeforeAoi);
@@ -54,6 +58,7 @@ test('critical flow preserves land basemap, source-matches isobaths and auto-fit
   await page.locator('#clearAoi').click();
   await expect(page.locator('#aoiStatus')).toContainText('No AOI selected');
   await expect(page.locator('#fitAoi')).toBeDisabled();
+  await expect(page.locator('#bathySourceStatus')).toContainText('define an AOI');
 
   await page.locator('#baseMap').selectOption('satellite');
   await page.locator('#bathyMode').selectOption('emodnet-multicolour');
@@ -67,6 +72,7 @@ test('critical flow preserves land basemap, source-matches isobaths and auto-fit
   await page.evaluate(() => window.__MSO__.map.setZoom(17));
   await drawAoi(page, { x: 180, y: 150 }, { x: 560, y: 500 });
   await expect(page.locator('#bathyStatus')).toContainText(/Numeric bathymetry unavailable|REAL EMODnet/);
+  await expect(page.locator('#bathySourceStatus')).toContainText('standard EMODnet DTM ~115 m fallback');
 
   await page.locator('#bathyMode').selectOption('chart-relief');
   await expect(page.locator('#contourStatus')).toContainText('Seascape');
@@ -77,11 +83,17 @@ test('critical flow preserves land basemap, source-matches isobaths and auto-fit
   await page.locator('#buildEnvRequest').click();
   await expect(page.locator('#envRequestStatus')).toContainText('SOURCE-RESOLVED');
   await expect(page.locator('#envRequestStatus')).toContainText('5 jobs');
+  await expect(page.locator('#envRequestStatus')).toContainText('HR bathy 0');
   await expect(page.locator('#envRequestStatus')).toContainText('spatial:');
   await expect(page.locator('#downloadManifest')).toBeEnabled();
   await expect(page.locator('#downloadAoi')).toBeEnabled();
   await expect(page.locator('#downloadCopernicus')).toBeEnabled();
   await expect(page.locator('#openBathymetry')).toHaveAttribute('href', /ows\.emodnet-bathymetry\.eu\/wcs/);
+  const manifestSource = await page.evaluate(() => {
+    document.querySelector('#buildEnvRequest').click();
+    return window.__MSO__.state.bathymetrySource?.selected_source;
+  });
+  expect(manifestSource).toBe('EMODNET_STANDARD_DTM');
 
   await page.locator('#envMaxDepth').fill('800');
   await expect(page.locator('#downloadManifest')).toBeDisabled();
