@@ -25,7 +25,14 @@ const originalStatus = contourEngine.onStatus;
 let contextFallback = false;
 
 contourEngine.onStatus = message => {
-  originalStatus(contextFallback ? `CONTEXT ONLY · ${message}` : message);
+  if (!contextFallback) {
+    originalStatus(message);
+    return;
+  }
+  const phase = state.aoi
+    ? 'local derived contour unavailable'
+    : 'waiting for local AOI bathymetry';
+  originalStatus(`CONTEXT ONLY · ${phase} · ${message}`);
 };
 
 function applyContourSourcePolicy() {
@@ -69,7 +76,7 @@ function applyContourSourcePolicy() {
   if (status) {
     const reason = state.aoi
       ? `local numeric grid produced no contour crossing${summary?.confidence ? ` · local confidence ${summary.confidence}` : ''}`
-      : 'define an AOI to replace context with local derived isobaths';
+      : 'waiting for local AOI bathymetry';
     status.textContent = `CONTEXT ONLY · EMODnet isobaths · ${reason}`;
     status.className = 'status warn';
   }
