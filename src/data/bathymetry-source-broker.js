@@ -283,6 +283,14 @@ function applicability(source, aoi) {
   return intersects(aoi, source.coverage) ? 'APPLICABLE' : 'OUTSIDE_COVERAGE';
 }
 
+function availability(source) {
+  if (source.execution === 'USER_SUPPLIED' || source.execution === 'LICENSED_OR_USER_SUPPLIED') return 'USER_OR_LICENCE_REQUIRED';
+  if (source.execution === 'PUBLIC_OGC' || source.execution === 'SUBSET_DOWNLOAD_OR_OPENDAP' || source.execution === 'API_OR_DOWNLOAD') return 'QUERYABLE';
+  if (source.execution === 'DERIVATION_REQUIRED') return 'DERIVATION_REQUIRED';
+  if (source.execution === 'COVERAGE_TEST_REQUIRED') return 'COVERAGE_TEST_REQUIRED';
+  return 'DISCOVERY_REQUIRED';
+}
+
 function useClass(source) {
   if (source.role === 'PRIMARY_NUMERIC' || source.role === 'PRIMARY_NUMERIC_DISCOVERY') return 'PRIMARY';
   if (source.role === 'HYDROGRAPHIC_CONSTRAINT') return 'CONSTRAINT';
@@ -309,10 +317,14 @@ export function buildBathymetryDiscoveryPlan(aoi, {
         + (micro && source.typical_resolution_m <= 10 ? 5 : 0)
         + (micro && source.typical_resolution_m >= 100 ? -8 : 0)
       : -999;
+    const accessState = availability(source);
+    const readyForUse = accessState === 'QUERYABLE' && ['BASE_NUMERIC','GLOBAL_FALLBACK'].includes(source.role);
     return {
       ...source,
       applicability: app,
       applicable,
+      availability: accessState,
+      ready_for_use: readyForUse,
       score,
       use_class: useClass(source),
       resolution_fit: Number.isFinite(source.typical_resolution_m)
@@ -326,6 +338,8 @@ export function buildBathymetryDiscoveryPlan(aoi, {
   const supplemental = candidates.filter(item => item.use_class === 'SUPPLEMENTAL');
   const conditional = candidates.filter(item => item.use_class === 'CONDITIONAL');
   const fallback = candidates.filter(item => item.use_class === 'FALLBACK');
+  const executableBaseline = candidates.find(item => item.ready_for_use && ['PRIMARY','FALLBACK'].includes(item.use_class)) ?? null;
+  const bestPotential = primary[0] ?? null;
 
   return {
     schema: 'bathymetry-source-plan/0.1',
@@ -349,6 +363,8 @@ export function buildBathymetryDiscoveryPlan(aoi, {
       satellite_bathymetry_is_conditional: true
     },
     recommended_strategy: {
+      best_potential_source: bestPotential?.id ?? null,
+      current_executable_baseline: executableBaseline?.id ?? null,
       primary_numeric_candidates: primary.map(item => item.id),
       hydrographic_constraints: constraints.map(item => item.id),
       supplemental_observations: supplemental.map(item => item.id),
@@ -377,6 +393,8 @@ export function summarizeBathymetryPlan(plan, limit = 6) {
     use_class: item.use_class,
     applicability: item.applicability,
     execution: item.execution,
+    availability: item.availability,
+    ready_for_use: item.ready_for_use,
     resolution_m: item.typical_resolution_m,
     score: item.score
   }));
