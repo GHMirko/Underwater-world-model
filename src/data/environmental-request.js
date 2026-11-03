@@ -50,17 +50,39 @@ export function estimateBathymetryCells(aoi, resolution = BATHY_RES_DEG) {
   return { nx, ny, cells: nx * ny };
 }
 
+function aoiInsideBbox(aoi, bbox) {
+  return aoi.minLon >= bbox[0] && aoi.minLat >= bbox[1] && aoi.maxLon <= bbox[2] && aoi.maxLat <= bbox[3];
+}
+
+function resolvedCopernicusDefinition(definition, aoi) {
+  if (!definition.coverageBbox || aoiInsideBbox(aoi, definition.coverageBbox) || !definition.globalFallback) {
+    return { ...definition, sourceProfile: 'REGIONAL' };
+  }
+  return {
+    ...definition,
+    productId: definition.globalFallback.productId,
+    datasetId: definition.globalFallback.datasetId,
+    variables: definition.globalFallback.variables,
+    nativeHorizontalResolutionM: definition.globalFallback.nativeHorizontalResolutionM,
+    temporalResolution: definition.globalFallback.temporalResolution,
+    sourceProfile: 'GLOBAL'
+  };
+}
+
 function buildCopernicusJob(definition, request) {
-  const adequacy = resolutionAssessment(request.aoi, definition.nativeHorizontalResolutionM);
-  const contextBufferM = adequacy.status === 'ADEQUATE' ? 0 : definition.nativeHorizontalResolutionM * 1.25;
+  const resolved = resolvedCopernicusDefinition(definition, request.aoi);
+  const adequacy = resolutionAssessment(request.aoi, resolved.nativeHorizontalResolutionM);
+  const contextBufferM = adequacy.status === 'ADEQUATE' ? 0 : resolved.nativeHorizontalResolutionM * 1.25;
   const sourceAoi = contextBufferM > 0 ? expandAoiByMeters(request.aoi, contextBufferM) : request.aoi;
   return {
     id: `copernicus-${definition.id}`,
     provider: definition.provider,
-    product_id: definition.productId,
-    dataset_id: definition.datasetId,
-    variables: [...definition.variables],
-    native_horizontal_resolution_m: definition.nativeHorizontalResolutionM,
+    product_id: resolved.productId,
+    dataset_id: resolved.datasetId,
+    variables: [...resolved.variables],
+    native_horizontal_resolution_m: resolved.nativeHorizontalResolutionM,
+    source_profile: resolved.sourceProfile,
+    temporal_resolution: resolved.temporalResolution ?? 'hourly',
     spatial_adequacy: adequacy,
     context_buffer_m: contextBufferM,
     subset: {
@@ -70,8 +92,12 @@ function buildCopernicusJob(definition, request) {
     },
     output: { format: 'netcdf', canonical_target: ENVIRONMENT_PACKAGE_PLAN.gridded },
     execution: 'BACKEND_REQUIRED',
-    provenance: 'Copernicus Marine official 3D hourly Mediterranean analysis/forecast dataset',
-    resolution_note: definition.resolutionNote
+    provenance: resolved.sourceProfile === 'REGIONAL'
+      ? 'Copernicus Marine Mediterranean regional physics analysis/forecast dataset'
+      : 'Copernicus Marine Global Ocean Physics Analysis and Forecast fallback',
+    resolution_note: resolved.sourceProfile === 'REGIONAL'
+      ? definition.resolutionNote
+      : 'Global 1/12° physics model used outside the Mediterranean regional product; treat as background environmental state for micro-AOIs.'
   };
 }
 
@@ -90,6 +116,26 @@ function sanitizeHrPrimary(primary) {
 }
 
 function buildBathymetryJob(definition, request, selection = null, discoveryPlan = null) {
+  const brokerBaseline = discoveryPlan?.recommended_strategy?.current_executable_baseline ?? null;
+  if (brokerBaseline === 'GEBCO_2026') {
+    const nativeResolution = 463;
+    return {
+      id: 'gebco-2026-bathymetry',
+      provider: 'GEBCO',
+      product_id: 'GEBCO_2026',
+      service: 'OPeNDAP_OR_SUBSET_DOWNLOAD',
+      request_url: 'https://www.gebco.net/data-products/gridded-bathymetry-data',
+      subset: { bbox: [...request.bbox] },
+      native_horizontal_resolution_m: nativeResolution,
+      spatial_adequacy: resolutionAssessment(request.aoi, nativeResolution),
+      source_output: { format: 'netcdf-cf-or-geotiff', resolution_arcsec: 15 },
+      normalization_target: { format: 'netcdf', file: ENVIRONMENT_PACKAGE_PLAN.gridded, variable: 'bathymetry' },
+      execution: 'SUBSET_DOWNLOAD_OR_OPENDAP',
+      provenance: 'GEBCO 2026 global 15 arc-second terrain model selected as global fallback by the bathymetry source broker',
+      resolution_note: 'Global fallback; underlying source quality varies and shallow-water vertical references may be heterogeneous.',
+      source_broker_plan: discoveryPlan
+    };
+  }
   const fallbackGrid = estimateBathymetryCells(request.aoi);
   const fallbackUrl = buildEmodnetBathymetryUrl(request.aoi);
   const useHr = selection?.selected_source === 'EMODNET_HR_DTM' && selection?.primary?.download_url;
@@ -151,6 +197,21 @@ function buildBathymetryJob(definition, request, selection = null, discoveryPlan
 }
 
 function buildSubstrateJob(definition, request) {
+  const europe = !(request.aoi.maxLon < -36 || request.aoi.minLon > 43 || request.aoi.maxLat < 15 || request.aoi.minLat > 90);
+  if (!europe) {
+    return {
+      id: 'seabed-substrate-unresolved-global',
+      provider: 'UNRESOLVED',
+      service: null,
+      subset: { bbox: [...request.bbox] },
+      native_horizontal_resolution_m: null,
+      spatial_adequacy: { status: 'UNRESOLVED', cellsAcrossMin: null, cellsAcrossMax: null },
+      output: { format: 'geojson', canonical_target: ENVIRONMENT_PACKAGE_PLAN.seabedVector },
+      execution: 'GLOBAL_PROVIDER_DISCOVERY_REQUIRED',
+      provenance: 'No global seabed-substrate provider has yet been resolved by this broker for the AOI.',
+      resolution_note: 'Resolve a regional/national/global substrate source before predictor use.'
+    };
+  }
   return {
     id: 'emodnet-seabed-substrate', provider: definition.provider, service: definition.service, endpoint: definition.endpoint,
     capabilities_url: definition.capabilitiesUrl, feature_type: null,
@@ -191,7 +252,7 @@ export function buildEnvironmentalRequest({
   const request = {
     schema: 'environmental-data-request/0.3',
     created_at: new Date().toISOString(),
-    region_profile: 'MEDITERRANEAN',
+    region_profile: aoiInsideBbox(aoi, [-17.29, 30.19, 36.29, 45.98]) ? 'MEDITERRANEAN' : 'GLOBAL_OCEAN',
     aoi: { ...aoi },
     geometry: aoiToPolygon(aoi),
     bbox: bboxFromAoi(aoi),
