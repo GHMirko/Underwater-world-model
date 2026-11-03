@@ -39,7 +39,9 @@ export class AdaptiveContours {
     this.bathymetryMode = mode;
     this.family = contourFamilyForBathymetry(mode);
     this.raw = null;
+    clearTimeout(this.timer);
     this.abortController?.abort();
+    this.abortController = null;
     this._removeAll();
     if (this.visible) this.refresh();
   }
@@ -47,6 +49,12 @@ export class AdaptiveContours {
   setVisible(visible) {
     this.visible = visible;
     if (!visible) {
+      // Context WFS calls are asynchronous. Cancelling both the debounce timer
+      // and the active fetch prevents an old context request from re-mounting
+      // itself after local AOI contours have taken authority.
+      clearTimeout(this.timer);
+      this.abortController?.abort();
+      this.abortController = null;
       this._clearMarkers();
       this._removeAll();
       this.onStatus('Isobaths off');
@@ -74,9 +82,9 @@ export class AdaptiveContours {
       return;
     }
 
-    // Source-matched rule: Seascape bathymetry uses Seascape contours only.
     if (this.family === 'seascape') {
       this.abortController?.abort();
+      this.abortController = null;
       this._clearVector();
       this._removeFallback();
       this._renderDense();
@@ -88,7 +96,6 @@ export class AdaptiveContours {
       return;
     }
 
-    // EMODnet bathymetry uses EMODnet contours only.
     this._removeDense();
     const zoom = this.map.getZoom();
     if (zoom < 5) {
@@ -97,13 +104,14 @@ export class AdaptiveContours {
       return;
     }
 
-    // Best-available rendering: mount WMS context immediately. WFS is an
-    // upgrade, not a prerequisite. This prevents blank contour states while
-    // vector requests are loading, aborted or blocked by a client network.
+    // Best-available rendering: the WMS exists immediately. WFS is merely a
+    // higher-quality vector upgrade and may disappear without creating a blank
+    // state.
     this._renderFallback();
 
     this.abortController?.abort();
-    this.abortController = new AbortController();
+    const requestController = new AbortController();
+    this.abortController = requestController;
     const bounds = this.map.getBounds();
     const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(',');
     const urls = [
@@ -114,30 +122,29 @@ export class AdaptiveContours {
     this.onStatus('EMODnet context isobaths active · loading vector upgrade…');
     for (const url of urls) {
       try {
-        const response = await fetch(url, { signal: this.abortController.signal, headers: { Accept: 'application/json' } });
+        const response = await fetch(url, { signal: requestController.signal, headers: { Accept: 'application/json' } });
         if (!response.ok) throw new Error(`WFS ${response.status}`);
-        this.raw = await response.json();
+        const raw = await response.json();
+        // Authority may have switched to local AOI contours while the request
+        // was in flight. A stale response must never mutate the map or status.
+        if (!this.visible || this.abortController !== requestController || requestController.signal.aborted) return;
+        this.raw = raw;
         this._renderVector();
         return;
       } catch (error) {
-        // An abort can be caused by a newer refresh. Keep the already-mounted
-        // WMS rather than tearing the context layer down.
         if (error.name === 'AbortError') return;
+        if (!this.visible || this.abortController !== requestController) return;
       }
     }
 
-    // WMS is already mounted. State that explicitly rather than adding it only
-    // after all WFS attempts have failed.
+    if (!this.visible || this.abortController !== requestController || requestController.signal.aborted) return;
     this.onStatus('Source-matched EMODnet isobaths · WFS unavailable, WMS context active');
   }
 
   _renderDense() {
     if (!this.map.isStyleLoaded()) return;
     if (this.map.getSource(DENSE_SOURCE)) return;
-    this.map.addSource(DENSE_SOURCE, {
-      type: 'vector',
-      url: SEASCAPE_VECTOR
-    });
+    this.map.addSource(DENSE_SOURCE, { type: 'vector', url: SEASCAPE_VECTOR });
     this.map.addLayer({
       id: DENSE_LINE,
       type: 'line',
@@ -155,6 +162,7 @@ export class AdaptiveContours {
   }
 
   _renderVector() {
+    if (!this.visible) return;
     this._removeFallback();
     const filtered = filterContours(this.raw, this.map.getZoom());
     if (this.map.getSource(SOURCE)) this.map.getSource(SOURCE).setData(filtered);
@@ -196,13 +204,13 @@ export class AdaptiveContours {
         const element = document.createElement('div');
         element.className = 'contour-label';
         element.textContent = `${depth} m`;
-        const marker = new maplibregl.Marker({ element }).setLngLat(point).addTo(this.map);
-        this.markers.push(marker);
+        this.markers.push(new maplibregl.Marker({ element }).setLngLat(point).addTo(this.map));
       }
     }
   }
 
   _renderFallback() {
+    if (!this.visible || !this.map.isStyleLoaded()) return;
     this._clearVector();
     if (!this.map.getSource(FALLBACK_SOURCE)) {
       this.map.addSource(FALLBACK_SOURCE, { type: 'raster', tiles: [emodnetWms('emodnet:contours')], tileSize: 256, maxzoom: 22 });
@@ -240,6 +248,7 @@ export class AdaptiveContours {
   destroy() {
     clearTimeout(this.timer);
     this.abortController?.abort();
+    this.abortController = null;
     this.map.off('moveend', this._refresh);
     this.map.off('style.load', this._refresh);
     this._removeAll();
