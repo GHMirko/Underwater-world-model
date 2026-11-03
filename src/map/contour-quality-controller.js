@@ -76,7 +76,10 @@ subscribeState((next, patch) => {
     Object.prototype.hasOwnProperty.call(patch, 'contourDensity') ||
     Object.prototype.hasOwnProperty.call(patch, 'baseMap') ||
     Object.prototype.hasOwnProperty.call(patch, 'aoi')
-  ) scheduleApply();
+  ) {
+    try { applyQualityPolicy(); } catch { /* style graph may still be settling */ }
+    scheduleApply();
+  }
 });
 
 const contourToggle = document.querySelector('#contours');
