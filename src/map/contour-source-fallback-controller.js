@@ -92,6 +92,6 @@ subscribeState((next, patch) => {
 });
 
 const badge = document.querySelector('.header .badge');
-if (badge) badge.textContent = 'GitHub v0.16.1 Context + Local Isobaths';
+if (badge) badge.textContent = 'GitHub v0.16 Confidence-Aware Contours · v0.16.1';
 
 applyContourSourcePolicy();
