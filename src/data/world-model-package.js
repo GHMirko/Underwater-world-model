@@ -136,7 +136,7 @@ export function buildWorldModelPackage({ state, environmentalRequest }) {
     },
     layers: {
       bathymetry: bathymetryLayer(state, environmentalRequest),
-      source_jobs: (environmentalRequest.source_jobs ?? []).filter(job => !['emodnet-bathymetry', 'emodnet-hr-bathymetry'].includes(job.id)).map(sourceLayer),
+      source_jobs: (environmentalRequest.source_jobs ?? []).filter(job => !['emodnet-bathymetry', 'emodnet-hr-bathymetry', 'gebco-2026-bathymetry'].includes(job.id)).map(sourceLayer),
       planned_derived_products: environmentalRequest.derived_products ?? []
     },
     extraction_contract: {
