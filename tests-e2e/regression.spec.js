@@ -21,11 +21,14 @@ async function drawAoi(page, from = { x: 180, y: 180 }, to = { x: 430, y: 360 })
   await expect(page.locator('#aoiStatus')).not.toContainText('No AOI selected');
 }
 
-test('critical flow survives micro-AOI map/layer/data-request changes and external network failure', async ({ page }) => {
+test('critical flow preserves land basemap, source-matches isobaths and auto-fits micro-AOI', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
   await expect(page.locator('#bathyMode')).toHaveValue('chart-relief');
+  await expect(page.locator('#bathyMode option')).toHaveCount(4);
+  await expect(page.locator('#bathyMode')).not.toContainText('Atlas');
+  await expect(page.locator('#bathyMode')).not.toContainText('GEBCO');
   await expect(page.locator('#contourDensity')).toHaveValue('dense');
   await expect(page.locator('#depthLegend')).toContainText('Depth shading');
   await expect(page.locator('#downloadManifest')).toBeDisabled();
@@ -35,14 +38,17 @@ test('critical flow survives micro-AOI map/layer/data-request changes and extern
   await page.evaluate(() => window.__MSO__.map.setZoom(17));
   await page.waitForTimeout(250);
 
+  const zoomBeforeAoi = await page.evaluate(() => window.__MSO__.map.getZoom());
   await drawAoi(page, { x: 150, y: 130 }, { x: 550, y: 530 });
   await expect(page.locator('#aoiScaleStatus')).toContainText('MICRO-AOI');
+  await expect(page.locator('#aoiScaleStatus')).toContainText('auto-fit');
   await expect(page.locator('#fitAoi')).toBeEnabled();
   await expect(page.locator('#spatialAdequacy')).toContainText('UNRESOLVED');
   await expect(page.locator('#spatialAdequacy')).toContainText('COARSE');
-  await page.locator('#fitAoi').click();
-  await page.waitForTimeout(500);
-  expect(await page.evaluate(() => window.__MSO__.map.getZoom())).toBeGreaterThan(16);
+  await page.waitForTimeout(650);
+  const zoomAfterAoi = await page.evaluate(() => window.__MSO__.map.getZoom());
+  expect(zoomAfterAoi).toBeGreaterThanOrEqual(zoomBeforeAoi);
+  expect(zoomAfterAoi).toBeGreaterThan(16);
 
   await page.locator('#clearAoi').click();
   await expect(page.locator('#aoiStatus')).toContainText('No AOI selected');
@@ -51,6 +57,7 @@ test('critical flow survives micro-AOI map/layer/data-request changes and extern
   await page.locator('#baseMap').selectOption('satellite');
   await page.locator('#bathyMode').selectOption('emodnet-multicolour');
   await expect(page.locator('#depthLegend')).toContainText('EMODnet depth');
+  await expect(page.locator('#contourStatus')).toContainText(/EMODnet|Loading source-matched/);
   await page.locator('#contourDensity').selectOption('major');
   await page.locator('#contourDensity').selectOption('dense');
   await page.locator('#contours').uncheck();
@@ -59,6 +66,10 @@ test('critical flow survives micro-AOI map/layer/data-request changes and extern
   await page.evaluate(() => window.__MSO__.map.setZoom(17));
   await drawAoi(page, { x: 180, y: 150 }, { x: 560, y: 500 });
   await expect(page.locator('#bathyStatus')).toContainText(/Numeric bathymetry unavailable|REAL EMODnet/);
+
+  await page.locator('#bathyMode').selectOption('chart-relief');
+  await expect(page.locator('#contourStatus')).toContainText('Seascape');
+  await expect(page.locator('#depthLegend')).toContainText('sea-only');
 
   await expect(page.locator('#envVariables input:checked')).toHaveCount(5);
   await page.locator('#analysisGridM').fill('20');
