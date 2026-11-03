@@ -18,7 +18,8 @@ function statusElement() {
 function localSummaryText(summary) {
   if (!summary?.feature_count) return null;
   const quality = contourDisplayAssessment(summary);
-  return `Adaptive isobaths · ${summary.interval_m} m interval · ${summary.levels_m.length} levels · confidence ${summary.confidence} · coverage ${(summary.coverage_ratio * 100).toFixed(0)}% · ${quality.ready ? 'LOCAL ACCEPTED' : 'LOCAL INSUFFICIENT'}`;
+  const source = state.bathymetryGridSource === 'EMODNET_WCS' ? 'WCS numeric grid' : 'REST numeric grid';
+  return `Adaptive isobaths · ${source} · ${summary.interval_m} m interval · ${summary.levels_m.length} levels · confidence ${summary.confidence} · coverage ${(summary.coverage_ratio * 100).toFixed(0)}% · ${quality.ready ? 'LOCAL ACCEPTED' : 'LOCAL INSUFFICIENT'}`;
 }
 
 const app = await waitForApp();
@@ -111,6 +112,7 @@ subscribeState((next, patch) => {
   if (
     Object.prototype.hasOwnProperty.call(patch, 'aoi') ||
     Object.prototype.hasOwnProperty.call(patch, 'adaptiveContours') ||
+    Object.prototype.hasOwnProperty.call(patch, 'bathymetryGridSource') ||
     Object.prototype.hasOwnProperty.call(patch, 'bathyMode') ||
     Object.prototype.hasOwnProperty.call(patch, 'contours') ||
     Object.prototype.hasOwnProperty.call(patch, 'contourDensity') ||
@@ -125,6 +127,6 @@ map.on('style.load', () => {
 });
 
 const badge = document.querySelector('.header .badge');
-if (badge) badge.textContent = 'GitHub v0.16 Confidence-Aware Contours · v0.16.2';
+if (badge) badge.textContent = 'GitHub v0.16 Confidence-Aware Contours · v0.17 WCS';
 
 applyContourSourcePolicy();
