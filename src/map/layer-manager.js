@@ -18,7 +18,8 @@ export class LayerManager {
     this.map = map;
     this.bathyMode = 'chart-relief';
     this.depthOpacity = 0.72;
-    this._styleHandler = () => this.restore();
+    this._restoreTimers = new Set();
+    this._styleHandler = () => this._scheduleRestore();
     map.on('style.load', this._styleHandler);
   }
 
@@ -57,9 +58,6 @@ export class LayerManager {
       source: sourceId,
       paint: {
         'raster-opacity': opacity,
-        // Bilinear is intentional for the visual layer: at z18-z22 the
-        // source is still ~115 m. This keeps the image visible without
-        // claiming additional native resolution.
         'raster-resampling': 'linear'
       }
     });
@@ -67,16 +65,12 @@ export class LayerManager {
 
   renderBathymetry() {
     const map = this.map;
-    if (!map.isStyleLoaded()) return;
+    if (!map.isStyleLoaded()) return false;
     this._clearBathymetry();
 
     const stack = visualBathymetryStack(this.bathyMode);
-    if (!stack.length) return;
+    if (!stack.length) return true;
 
-    // The bottom layer is a sea-only fallback when the primary source can
-    // encode water with unknown depth. This is especially relevant inside
-    // ports and very small coastal AOIs where a high-resolution satellite
-    // basemap may greatly exceed bathymetric data resolution.
     if (stack.length > 1) {
       const fallbackSpec = BATHYMETRY[stack[0]];
       if (fallbackSpec?.provider === 'emodnet') {
@@ -90,7 +84,7 @@ export class LayerManager {
     }
 
     const spec = BATHYMETRY[this.bathyMode] ?? BATHYMETRY['chart-relief'];
-    if (!spec.layer) return;
+    if (!spec.layer) return true;
 
     if (spec.provider === 'seascape') {
       map.addSource(IDS.bathySource, {
@@ -109,27 +103,60 @@ export class LayerManager {
           resampling: 'nearest'
         }
       });
-      return;
+      return true;
     }
 
-    // EMODnet rainbow/multicolour are transparent sea overlays only. WMS is
-    // requested at the current view resolution, so it remains displayable at
-    // micro-AOI zoom even though the underlying DTM is still ~115 m native.
     this._addEmodnetRaster(
       IDS.bathySource,
       IDS.bathyLayer,
       spec.layer,
       this.depthOpacity
     );
+    return true;
+  }
+
+  _scheduleRestore() {
+    // setStyle() destroys all custom sources/layers. A single style.load hook
+    // proved too timing-sensitive across browsers, so the world-model sea
+    // stack is remounted through a bounded retry sequence. This mechanism is
+    // intentionally generic: later current/SSP/predictor layers can use the
+    // same lifecycle contract instead of being coupled to a basemap.
+    for (const timer of this._restoreTimers) clearTimeout(timer);
+    this._restoreTimers.clear();
+
+    const tryRestore = attempt => {
+      if (this.map.isStyleLoaded()) {
+        try {
+          this.renderBathymetry();
+          return;
+        } catch {
+          // Style graph can still be settling immediately after style.load.
+        }
+      }
+      if (attempt >= 10) return;
+      const timer = setTimeout(() => {
+        this._restoreTimers.delete(timer);
+        tryRestore(attempt + 1);
+      }, 50 + attempt * 25);
+      this._restoreTimers.add(timer);
+    };
+
+    const timer = setTimeout(() => {
+      this._restoreTimers.delete(timer);
+      tryRestore(0);
+    }, 0);
+    this._restoreTimers.add(timer);
   }
 
   restore() {
-    if (!this.map.isStyleLoaded()) return;
-    this.renderBathymetry();
+    if (this.renderBathymetry()) return;
+    this._scheduleRestore();
   }
 
   destroy() {
     this.map.off('style.load', this._styleHandler);
+    for (const timer of this._restoreTimers) clearTimeout(timer);
+    this._restoreTimers.clear();
     this._clearBathymetry();
   }
 }
