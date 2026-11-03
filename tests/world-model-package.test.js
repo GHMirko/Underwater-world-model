@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildWorldModelPackage } from '../src/data/world-model-package.js';
+import { buildBathymetryDiscoveryPlan } from '../src/data/bathymetry-source-broker.js';
 
 const state = {
   mission: 'ASW',
@@ -15,6 +16,7 @@ const state = {
     vertical_uncertainty_m: null, fitness_for_use: ['MISSION_PLANNING', 'PREDICTOR_BACKGROUND'],
     caution: 'Do not use as sole source for close-proximity bottom or obstacle avoidance.'
   },
+  bathymetryDiscoveryPlan: buildBathymetryDiscoveryPlan({ minLon: 9.85, minLat: 44.08, maxLon: 9.87, maxLat: 44.10 }, { targetGridM: 25 }),
   adaptiveContours: {
     derivation: 'EMODNET_WCS_NUMERIC_GRID', interval_m: 5, levels_m: [2, 5, 10, 15, 20, 25, 30, 35],
     feature_count: 14, confidence: 'MEDIUM'
@@ -50,13 +52,15 @@ const environmentalRequest = {
 test('World Model Package keeps analytical bathymetry separate from display surface', () => {
   const pkg = buildWorldModelPackage({ state, environmentalRequest });
   const bathy = pkg.layers.bathymetry;
-  assert.equal(pkg.schema, 'underwater-world-model-aoi-package/0.1');
+  assert.equal(pkg.schema, 'underwater-world-model-aoi-package/0.2');
   assert.equal(bathy.analytical_source.authoritative_for_predictors, true);
   assert.equal(bathy.analytical_source.request_url, environmentalRequest.source_jobs[0].request_url);
   assert.equal(bathy.derived_layers.display_surface.layer_class, 'DISPLAY_DERIVED');
   assert.equal(bathy.derived_layers.display_surface.predictor_input, false);
   assert.equal(bathy.standardization.preferred_gridded_exchange, 'NetCDF-CF');
   assert.equal(bathy.derived_layers.contours.predictor_input, true);
+  assert.equal(pkg.bathymetry_source_broker.recommended_strategy.current_executable_baseline, 'EMODNET_STANDARD_DTM');
+  assert.equal(pkg.synthesis_contract.target, 'ANALYSIS_READY_UNDERWATER_WORLD_MODEL');
 });
 
 test('World Model Package exposes extraction jobs and predictor contracts', () => {
