@@ -28,19 +28,35 @@ export const BASEMAPS = {
 export const SEASCAPE_RASTER = 'https://tiles.openwaters.io/seascape/raster.json';
 export const SEASCAPE_VECTOR = 'https://tiles.openwaters.io/seascape/vector.json';
 
+// Viewer bathymetry must be a sea-only overlay. Products that carry land
+// topography (e.g. EMODnet mean_atlas_land / GEBCO shaded relief) remain valid
+// data sources but are intentionally not exposed as viewer overlays.
 export const BATHYMETRY = {
-  'chart-relief': { name: 'Chart Relief · dynamic', layer: 'depth-relief', provider: 'seascape' },
-  'emodnet-rainbow': { name: 'EMODnet Rainbow', layer: 'emodnet:mean_rainbowcolour', provider: 'emodnet' },
-  'emodnet-multicolour': { name: 'EMODnet Multicolour', layer: 'emodnet:mean_multicolour', provider: 'emodnet' },
-  'emodnet-atlas': { name: 'EMODnet Atlas', layer: 'emodnet:mean_atlas_land', provider: 'emodnet' },
-  'gebco-relief': { name: 'GEBCO Relief', layer: 'gebco_latest', provider: 'gebco' },
-  none: { name: 'None', layer: null, provider: null }
+  'chart-relief': {
+    name: 'Chart Relief · sea-only',
+    layer: 'depth-relief',
+    provider: 'seascape',
+    contourFamily: 'seascape'
+  },
+  'emodnet-rainbow': {
+    name: 'EMODnet Rainbow · sea-only',
+    layer: 'emodnet:mean_rainbowcolour',
+    provider: 'emodnet',
+    contourFamily: 'emodnet'
+  },
+  'emodnet-multicolour': {
+    name: 'EMODnet Multicolour · sea-only',
+    layer: 'emodnet:mean_multicolour',
+    provider: 'emodnet',
+    contourFamily: 'emodnet'
+  },
+  none: { name: 'None', layer: null, provider: null, contourFamily: 'none' }
 };
+
+export function contourFamilyForBathymetry(mode) {
+  return (BATHYMETRY[mode] ?? BATHYMETRY.none).contourFamily;
+}
 
 export function emodnetWms(layer) {
   return `https://ows.emodnet-bathymetry.eu/wms?service=WMS&request=GetMap&version=1.1.1&layers=${encodeURIComponent(layer)}&styles=&format=image/png&transparent=true&width=256&height=256&srs=EPSG:3857&bbox={bbox-epsg-3857}`;
-}
-
-export function gebcoWms(layer) {
-  return `https://wms.gebco.net/mapserv?service=WMS&request=GetMap&version=1.1.1&layers=${encodeURIComponent(layer)}&styles=&format=image/png&transparent=true&width=256&height=256&srs=EPSG:3857&bbox={bbox-epsg-3857}`;
 }
