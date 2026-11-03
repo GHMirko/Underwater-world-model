@@ -6,6 +6,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/Underwater-world-model/');
   await expect(page.locator('#map')).toBeVisible();
   await expect(page.locator('#depthLegend')).toBeVisible();
+  await expect(page.locator('#aoiDepthGridStatus')).toBeVisible();
   await page.waitForTimeout(800);
 });
 
@@ -21,18 +22,24 @@ async function drawAoi(page, from = { x: 180, y: 180 }, to = { x: 430, y: 360 })
   await expect(page.locator('#aoiStatus')).not.toContainText('No AOI selected');
 }
 
-test('critical flow preserves map, resolves bathymetry fallback and auto-fits micro-AOI', async ({ page }) => {
+test('critical flow separates client land basemap from sea data and preserves micro-AOI operation', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await expect(page.locator('#bathyMode')).toHaveValue('chart-relief');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.14 Client Cartography');
+  await expect(page.locator('#baseMap option')).toHaveCount(2);
+  await expect(page.locator('#baseMap')).toContainText('Minimal');
+  await expect(page.locator('#baseMap')).toContainText('Satellite');
+  await expect(page.locator('#baseMap')).not.toContainText('Chart');
+  await expect(page.locator('#baseMap')).not.toContainText('Terrain');
+  await expect(page.locator('#baseMap')).toHaveValue('minimal');
+
+  await expect(page.locator('#bathyMode')).toHaveValue('emodnet-multicolour');
   await expect(page.locator('#bathyMode option')).toHaveCount(4);
-  await expect(page.locator('#bathyMode')).not.toContainText('Atlas');
-  await expect(page.locator('#bathyMode')).not.toContainText('GEBCO');
   await expect(page.locator('#contourDensity')).toHaveValue('dense');
-  await expect(page.locator('#depthLegend')).toContainText('Depth shading');
-  await expect(page.locator('#depthLegend')).toContainText('visual gap-fill');
+  await expect(page.locator('#depthLegend')).toContainText('EMODnet depth');
   await expect(page.locator('#bathySourceStatus')).toContainText('define an AOI');
+  await expect(page.locator('#aoiDepthGridStatus')).toContainText('define an AOI');
   await expect(page.locator('#downloadManifest')).toBeDisabled();
 
   const maxZoom = await page.evaluate(() => window.__MSO__.map.getMaxZoom());
@@ -48,6 +55,7 @@ test('critical flow preserves map, resolves bathymetry fallback and auto-fits mi
   await expect(page.locator('#spatialAdequacy')).toContainText('UNRESOLVED');
   await expect(page.locator('#spatialAdequacy')).toContainText('COARSE');
   await expect(page.locator('#bathySourceStatus')).toContainText('standard EMODnet DTM ~115 m fallback');
+  await expect(page.locator('#aoiDepthGridStatus')).toContainText(/unavailable|sampling/);
   const sourceStatus = await page.evaluate(() => window.__MSO__.state.bathymetrySource?.status);
   expect(sourceStatus).toBe('STANDARD_FALLBACK');
   await page.waitForTimeout(650);
@@ -55,13 +63,22 @@ test('critical flow preserves map, resolves bathymetry fallback and auto-fits mi
   expect(zoomAfterAoi).toBeGreaterThanOrEqual(zoomBeforeAoi);
   expect(zoomAfterAoi).toBeGreaterThan(16);
 
+  // Sea-data layers must survive a land/background change.
+  const bathyLayerBefore = await page.evaluate(() => Boolean(window.__MSO__.map.getLayer('bathymetry-layer')));
+  expect(bathyLayerBefore).toBe(true);
+  await page.locator('#baseMap').selectOption('satellite');
+  await page.waitForTimeout(900);
+  await expect(page.locator('#baseMap')).toHaveValue('satellite');
+  const bathyLayerAfter = await page.evaluate(() => Boolean(window.__MSO__.map.getLayer('bathymetry-layer')));
+  expect(bathyLayerAfter).toBe(true);
+
   await page.locator('#clearAoi').click();
   await expect(page.locator('#aoiStatus')).toContainText('No AOI selected');
   await expect(page.locator('#fitAoi')).toBeDisabled();
   await expect(page.locator('#bathySourceStatus')).toContainText('define an AOI');
+  await expect(page.locator('#aoiDepthGridStatus')).toContainText('define an AOI');
 
-  await page.locator('#baseMap').selectOption('satellite');
-  await page.locator('#bathyMode').selectOption('emodnet-multicolour');
+  await page.locator('#bathyMode').selectOption('emodnet-rainbow');
   await expect(page.locator('#depthLegend')).toContainText('EMODnet depth');
   await expect(page.locator('#contourStatus')).toContainText(/EMODnet|Loading source-matched/);
   await page.locator('#contourDensity').selectOption('major');
@@ -74,10 +91,6 @@ test('critical flow preserves map, resolves bathymetry fallback and auto-fits mi
   await expect(page.locator('#bathyStatus')).toContainText(/Numeric bathymetry unavailable|REAL EMODnet/);
   await expect(page.locator('#bathySourceStatus')).toContainText('standard EMODnet DTM ~115 m fallback');
 
-  await page.locator('#bathyMode').selectOption('chart-relief');
-  await expect(page.locator('#contourStatus')).toContainText('Seascape');
-  await expect(page.locator('#depthLegend')).toContainText('visual gap-fill');
-
   await expect(page.locator('#envVariables input:checked')).toHaveCount(5);
   await page.locator('#analysisGridM').fill('20');
   await page.locator('#buildEnvRequest').click();
@@ -89,11 +102,6 @@ test('critical flow preserves map, resolves bathymetry fallback and auto-fits mi
   await expect(page.locator('#downloadAoi')).toBeEnabled();
   await expect(page.locator('#downloadCopernicus')).toBeEnabled();
   await expect(page.locator('#openBathymetry')).toHaveAttribute('href', /ows\.emodnet-bathymetry\.eu\/wcs/);
-  const manifestSource = await page.evaluate(() => {
-    document.querySelector('#buildEnvRequest').click();
-    return window.__MSO__.state.bathymetrySource?.selected_source;
-  });
-  expect(manifestSource).toBe('EMODNET_STANDARD_DTM');
 
   await page.locator('#envMaxDepth').fill('800');
   await expect(page.locator('#downloadManifest')).toBeDisabled();

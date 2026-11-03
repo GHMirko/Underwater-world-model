@@ -1,8 +1,8 @@
 export const BASEMAPS = {
-  chart: {
-    name: 'Chart',
-    tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}'],
-    attribution: 'Esri Ocean',
+  minimal: {
+    name: 'Minimal',
+    tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'],
+    attribution: 'Esri Light Gray',
     nativeMaxZoom: 16
   },
   satellite: {
@@ -10,36 +10,21 @@ export const BASEMAPS = {
     tiles: ['https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
     attribution: 'Esri World Imagery',
     nativeMaxZoom: 20
-  },
-  terrain: {
-    name: 'Terrain',
-    tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}'],
-    attribution: 'Esri Terrain',
-    nativeMaxZoom: 16
-  },
-  minimal: {
-    name: 'Minimal',
-    tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'],
-    attribution: 'Esri Light Gray',
-    nativeMaxZoom: 16
   }
 };
 
 export const SEASCAPE_RASTER = 'https://tiles.openwaters.io/seascape/raster.json';
 export const SEASCAPE_VECTOR = 'https://tiles.openwaters.io/seascape/vector.json';
 
-// Viewer bathymetry must be a sea-only overlay. Products that carry land
-// topography (e.g. EMODnet mean_atlas_land / GEBCO shaded relief) remain valid
-// data sources but are intentionally not exposed as viewer overlays.
+// Land/background and sea data are intentionally independent. The client viewer
+// exposes only basemaps that remain useful at micro-AOI scale; bathymetry is
+// always rendered as a separate sea-data layer.
 export const BATHYMETRY = {
   'chart-relief': {
     name: 'Chart Relief · sea-only',
     layer: 'depth-relief',
     provider: 'seascape',
     contourFamily: 'seascape',
-    // Seascape explicitly encodes 0 as water with unknown depth. The color
-    // relief keeps those pixels transparent, therefore a sea-only EMODnet WMS
-    // is placed underneath as a coarse visual gap-fill. It never alters land.
     visualFallback: 'emodnet-multicolour'
   },
   'emodnet-rainbow': {
@@ -65,13 +50,11 @@ export function visualBathymetryStack(mode) {
   const selected = BATHYMETRY[mode] ?? BATHYMETRY.none;
   if (!selected.layer) return [];
   if (!selected.visualFallback) return [mode];
-  // Bottom -> top rendering order. The fallback is visible only through
-  // transparent / unknown-depth pixels of the selected overlay.
   return [selected.visualFallback, mode];
 }
 
 export function emodnetWms(layer) {
-  return `https://ows.emodnet-bathymetry.eu/wms?service=WMS&request=GetMap&version=1.1.1&layers=${encodeURIComponent(layer)}&styles=&format=image/png&transparent=true&width=256&height=256&srs=EPSG:3857&bbox={bbox-epsg-3857}`;
+  return `https://ows.emodnet-bathymetry.eu/wms?service=WMS&request=GetMap&version=1.1.1&layers=${encodeURIComponent(layer)}&styles=&format=image/png&transparent=true&tiled=false&width=256&height=256&srs=EPSG:3857&bbox={bbox-epsg-3857}`;
 }
 
 export function emodnetHrBathymetryDiscoveryWfs(aoi) {
