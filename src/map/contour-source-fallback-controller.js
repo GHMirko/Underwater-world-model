@@ -126,7 +126,4 @@ map.on('style.load', () => {
   if (contextFallback) scheduleContextEnsure();
 });
 
-const badge = document.querySelector('.header .badge');
-if (badge) badge.textContent = 'GitHub v0.16 Confidence-Aware Contours · v0.17 WCS';
-
 applyContourSourcePolicy();
