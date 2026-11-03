@@ -37,7 +37,8 @@ root.innerHTML = `
         <div class="field"><label>Bathymetry overlay · sea only</label><select id="bathyMode">
           <option value="chart-relief">Chart Relief · sea-only</option>
           <option value="emodnet-rainbow">EMODnet Rainbow · sea-only</option>
-          <option value="emodnet-multicolour">EMODnet Multicolour · sea-only</option>
+          <option value="emodnet-multicolour">EMODnet Multicolour · Europe context</option>
+          <option value="gebco-global">GEBCO 2026 · global context</option>
           <option value="none">None</option>
         </select></div>
         <div class="field"><label>Bathymetry opacity</label><input id="depthOpacity" type="range" min="0" max="100" value="72"></div>
