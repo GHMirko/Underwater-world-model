@@ -21,9 +21,10 @@ export function chartReliefExpression() {
     .reverse()
     .forEach(({ depth, color }) => expression.push(-depth, color));
 
-  // Sea-only visual overlay: negative elevations get water colours; the
-  // coastline and all positive elevations are transparent so the selected
-  // basemap remains the sole renderer of land.
+  // Seascape schema: v=0 is water with unknown depth, v=1 drying foreshore,
+  // v=2 land. Keep all non-negative categories transparent. The LayerManager
+  // places a coarse EMODnet sea-only raster underneath, so unknown-depth water
+  // can still show a visual fallback without ever redrawing land.
   expression.push(
     -LSB, '#f8fdff',
     0, 'rgba(248,253,255,0)',
@@ -36,21 +37,21 @@ export function chartReliefExpression() {
 const MODE_LEGENDS = {
   'chart-relief': {
     title: 'Depth shading',
-    subtitle: 'sea-only dynamic DEM · darker = deeper',
+    subtitle: 'Seascape DEM · EMODnet visual gap-fill where depth is unknown',
     colors: CHART_RELIEF_STOPS.map(stop => stop.color),
     ticks: ['0', '20', '50', '100', '200', '500', '1k', '2k', '4k', '6k+'],
     quantitative: true
   },
   'emodnet-rainbow': {
     title: 'EMODnet depth',
-    subtitle: 'sea-only rainbow WMS · provider palette',
+    subtitle: 'sea-only rainbow WMS · native grid ~115 m',
     colors: ['#d73027', '#fc8d59', '#fee08b', '#d9ef8b', '#91cf60', '#1a9850', '#2c7bb6'],
     ticks: ['shallow', '', '', '', '', '', 'deep'],
     quantitative: false
   },
   'emodnet-multicolour': {
     title: 'EMODnet depth',
-    subtitle: 'sea-only multicolour WMS · provider palette',
+    subtitle: 'sea-only multicolour WMS · native grid ~115 m',
     colors: ['#d9f0ff', '#9ecae1', '#6baed6', '#4292c6', '#2171b5', '#084594'],
     ticks: ['shallow', '', '', '', '', 'deep'],
     quantitative: false
