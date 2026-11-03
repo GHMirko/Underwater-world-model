@@ -36,7 +36,11 @@ export const BATHYMETRY = {
     name: 'Chart Relief · sea-only',
     layer: 'depth-relief',
     provider: 'seascape',
-    contourFamily: 'seascape'
+    contourFamily: 'seascape',
+    // Seascape explicitly encodes 0 as water with unknown depth. The color
+    // relief keeps those pixels transparent, therefore a sea-only EMODnet WMS
+    // is placed underneath as a coarse visual gap-fill. It never alters land.
+    visualFallback: 'emodnet-multicolour'
   },
   'emodnet-rainbow': {
     name: 'EMODnet Rainbow · sea-only',
@@ -57,6 +61,20 @@ export function contourFamilyForBathymetry(mode) {
   return (BATHYMETRY[mode] ?? BATHYMETRY.none).contourFamily;
 }
 
+export function visualBathymetryStack(mode) {
+  const selected = BATHYMETRY[mode] ?? BATHYMETRY.none;
+  if (!selected.layer) return [];
+  if (!selected.visualFallback) return [mode];
+  // Bottom -> top rendering order. The fallback is visible only through
+  // transparent / unknown-depth pixels of the selected overlay.
+  return [selected.visualFallback, mode];
+}
+
 export function emodnetWms(layer) {
   return `https://ows.emodnet-bathymetry.eu/wms?service=WMS&request=GetMap&version=1.1.1&layers=${encodeURIComponent(layer)}&styles=&format=image/png&transparent=true&width=256&height=256&srs=EPSG:3857&bbox={bbox-epsg-3857}`;
+}
+
+export function emodnetHrBathymetryDiscoveryWfs(aoi) {
+  const bbox = [aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat].join(',');
+  return `https://ows.emodnet-bathymetry.eu/wfs?service=WFS&version=1.1.0&request=GetFeature&typeName=emodnet:hr_bathymetry_area&outputFormat=application/json&srsName=EPSG:4326&bbox=${bbox},EPSG:4326`;
 }

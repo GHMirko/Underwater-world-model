@@ -75,16 +75,18 @@ export class AdaptiveContours {
     }
 
     // Source-matched rule: Seascape bathymetry uses Seascape contours only.
-    // Do not add EMODnet major lines on top because different bathymetric
-    // models legitimately produce non-coincident contours.
+    // Seascape serves a global z8 base and regional detail to deeper zooms,
+    // overzooming the nearest baked ancestor where no finer source exists.
     if (this.family === 'seascape') {
       this.abortController?.abort();
       this._clearVector();
       this._removeFallback();
       this._renderDense();
-      this.onStatus(this.density === 'major'
-        ? 'Source-matched Seascape isobaths · provider has one vector contour family'
-        : 'Source-matched Seascape isobaths · detailed vector contours');
+      this.onStatus(this.map.getZoom() >= 17
+        ? 'Seascape isobaths · micro-zoom over native data where no local source exists'
+        : this.density === 'major'
+          ? 'Source-matched Seascape isobaths · provider has one vector contour family'
+          : 'Source-matched Seascape isobaths · detailed vector contours');
       return;
     }
 
@@ -164,6 +166,10 @@ export class AdaptiveContours {
       });
     }
     this._renderLabels(filtered);
+    if (!filtered.features.length && this.map.getZoom() >= 14) {
+      this.onStatus('EMODnet standard contours: no 50 m+ line in this micro-area · dense local isobaths require HR/local bathymetry');
+      return;
+    }
     this.onStatus(`Source-matched EMODnet: ${filtered.features.length} features · ${this.markers.length} labels · ≥ ${contourThreshold(this.map.getZoom())} m`);
   }
 
@@ -193,7 +199,7 @@ export class AdaptiveContours {
   _renderFallback() {
     this._clearVector();
     if (!this.map.getSource(FALLBACK_SOURCE)) {
-      this.map.addSource(FALLBACK_SOURCE, { type: 'raster', tiles: [emodnetWms('emodnet:contours')], tileSize: 256 });
+      this.map.addSource(FALLBACK_SOURCE, { type: 'raster', tiles: [emodnetWms('emodnet:contours')], tileSize: 256, maxzoom: 22 });
       this.map.addLayer({ id: FALLBACK_LAYER, type: 'raster', source: FALLBACK_SOURCE, paint: { 'raster-opacity': 0.95 } });
     }
   }

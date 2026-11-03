@@ -31,6 +31,7 @@ test('critical flow preserves land basemap, source-matches isobaths and auto-fit
   await expect(page.locator('#bathyMode')).not.toContainText('GEBCO');
   await expect(page.locator('#contourDensity')).toHaveValue('dense');
   await expect(page.locator('#depthLegend')).toContainText('Depth shading');
+  await expect(page.locator('#depthLegend')).toContainText('visual gap-fill');
   await expect(page.locator('#downloadManifest')).toBeDisabled();
 
   const maxZoom = await page.evaluate(() => window.__MSO__.map.getMaxZoom());
@@ -69,7 +70,7 @@ test('critical flow preserves land basemap, source-matches isobaths and auto-fit
 
   await page.locator('#bathyMode').selectOption('chart-relief');
   await expect(page.locator('#contourStatus')).toContainText('Seascape');
-  await expect(page.locator('#depthLegend')).toContainText('sea-only');
+  await expect(page.locator('#depthLegend')).toContainText('visual gap-fill');
 
   await expect(page.locator('#envVariables input:checked')).toHaveCount(5);
   await page.locator('#analysisGridM').fill('20');
