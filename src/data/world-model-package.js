@@ -86,7 +86,7 @@ export function buildWorldModelPackage({ state, environmentalRequest }) {
   if (!state?.aoi) throw new Error('AOI is required for the World Model Package');
   if (!environmentalRequest) throw new Error('Build the Environmental Data Request before the World Model Package');
   return {
-    schema: 'underwater-world-model-aoi-package/0.1',
+    schema: 'underwater-world-model-aoi-package/0.2',
     created_at: new Date().toISOString(),
     mission: state.mission,
     aoi: { ...state.aoi },
@@ -98,6 +98,36 @@ export function buildWorldModelPackage({ state, environmentalRequest }) {
       view_vs_data: 'Visualization layers are never authoritative numerical inputs. Predictors and optimizers consume analytical/derived data layers with provenance.',
       uncertainty: 'Best available information is retained with confidence, coverage, resolution and fitness-for-use metadata.',
       validity: { valid_until: null, rerun_at: null, event_driven_reassessment: true }
+    },
+    bathymetry_source_broker: state.bathymetryDiscoveryPlan ? {
+      schema: state.bathymetryDiscoveryPlan.schema,
+      area_profile: state.bathymetryDiscoveryPlan.area_profile,
+      policy: state.bathymetryDiscoveryPlan.policy,
+      recommended_strategy: state.bathymetryDiscoveryPlan.recommended_strategy,
+      candidates: state.bathymetryDiscoveryPlan.candidates?.map(item => ({
+        id: item.id,
+        label: item.label,
+        provider: item.provider,
+        use_class: item.use_class,
+        source_class: item.source_class,
+        applicability: item.applicability,
+        execution: item.execution,
+        access: item.access,
+        licence: item.licence,
+        typical_resolution_m: item.typical_resolution_m,
+        vertical_datum: item.vertical_datum,
+        score: item.score,
+        predictor: item.predictor,
+        viewer: item.viewer,
+        note: item.note
+      })) ?? []
+    } : null,
+    synthesis_contract: {
+      target: 'ANALYSIS_READY_UNDERWATER_WORLD_MODEL',
+      cell_schema: ['value', 'source_id', 'native_resolution_m', 'vertical_datum', 'derivation', 'uncertainty', 'confidence', 'valid_time', 'fitness_for_use'],
+      source_priority: 'qualified local numeric > regional/national HR > EMODnet HR/source survey > constrained ENC/SDB/CSB supplements > EMODnet standard > GEBCO global fallback',
+      display_policy: 'viewer derives colormap/isobaths from the World Model; display products never overwrite analytical values',
+      update_policy: 'new local observations may supersede lower-confidence prior cells while preserving lineage'
     },
     layers: {
       bathymetry: bathymetryLayer(state, environmentalRequest),
