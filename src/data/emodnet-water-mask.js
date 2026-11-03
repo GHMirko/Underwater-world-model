@@ -50,7 +50,7 @@ export function waterFractionForCell(mask, cell, subdivisions = 3) {
 }
 
 export function applyWaterMaskToGrid(grid, mask, {
-  minimumWaterFraction = 0.18,
+  minimumWaterFraction = 0.34,
   fullWaterFraction = 0.82
 } = {}) {
   if (!grid?.cells?.length || !grid?.samples?.length || !mask) {
