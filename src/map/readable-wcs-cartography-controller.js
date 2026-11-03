@@ -90,14 +90,21 @@ function styleLayers(map) {
     map.setPaintProperty(GRID_LAYER, 'fill-opacity', effectiveGridOpacity());
   }
 
+  // This controller only owns the contour presentation while the WCS raster
+  // is authoritative. REST/recovery contour visibility remains controlled by
+  // the existing quality controller and must not be overridden here.
+  if (!active()) {
+    if (map.getLayer(CASING_LAYER)) map.setLayoutProperty(CASING_LAYER, 'visibility', 'none');
+    return;
+  }
+
   if (!ensureCasing(map)) return;
-  const visible = active() ? 'visible' : 'none';
   const filter = state.contourDensity === 'major' ? ['==', ['get', 'major'], true] : null;
 
-  map.setLayoutProperty(CASING_LAYER, 'visibility', visible);
+  map.setLayoutProperty(CASING_LAYER, 'visibility', 'visible');
   map.setFilter(CASING_LAYER, filter);
 
-  map.setLayoutProperty(CONTOUR_LAYER, 'visibility', visible);
+  map.setLayoutProperty(CONTOUR_LAYER, 'visibility', 'visible');
   map.setFilter(CONTOUR_LAYER, filter);
   map.setLayoutProperty(CONTOUR_LAYER, 'line-cap', 'round');
   map.setLayoutProperty(CONTOUR_LAYER, 'line-join', 'round');
