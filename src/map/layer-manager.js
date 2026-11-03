@@ -25,7 +25,10 @@ export class LayerManager {
 
   setBathymetry(mode) {
     this.bathyMode = BATHYMETRY[mode] ? mode : 'chart-relief';
-    this.renderBathymetry();
+    // A basemap/style transition can leave MapLibre temporarily unable to
+    // accept custom sources/layers. Do not silently drop the requested sea
+    // layer: reuse the bounded restore path until the style graph is ready.
+    if (!this.renderBathymetry()) this._scheduleRestore();
   }
 
   setDepthOpacity(value) {
