@@ -23,7 +23,7 @@ test('alpha mask maps north-up geographic coordinates to pixels', () => {
   assert.equal(alphaAt(mask, 2, 0), 255);
 });
 
-test('coastal mask removes land-dominated cells and flags mixed cells', () => {
+test('coastal mask removes land-dominated cells and retains shallow water evidence', () => {
   const mask = {
     width: 3,
     height: 3,
@@ -53,7 +53,7 @@ test('coastal mask removes land-dominated cells and flags mixed cells', () => {
   };
   const fraction = waterFractionForCell(mask, grid.cells[0], 3);
   assert.ok(fraction >= 0 && fraction <= 1);
-  const masked = applyWaterMaskToGrid(grid, mask, { minimumWaterFraction: 0.1, fullWaterFraction: 0.95 });
+  const masked = applyWaterMaskToGrid(grid, mask, { minimumWaterFraction: 0.34, fullWaterFraction: 0.95 });
   assert.equal(masked.water_mask_applied, true);
   assert.equal(masked.valid_cells, 2);
   assert.ok(masked.cells.some(cell => cell.shallow_water));
