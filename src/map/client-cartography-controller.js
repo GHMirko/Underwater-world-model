@@ -11,6 +11,7 @@ const NATIVE_GRID_M = 115;
 let lastGeojson = { type: 'FeatureCollection', features: [] };
 let lastRange = null;
 let requestGeneration = 0;
+const restoreTimers = new Set();
 
 function waitForApp() {
   return new Promise(resolve => {
@@ -84,7 +85,7 @@ function currentOpacity() {
 }
 
 function ensureLayer(map) {
-  if (!map.isStyleLoaded()) return;
+  if (!map.isStyleLoaded()) return false;
   if (!map.getSource(SOURCE_ID)) {
     map.addSource(SOURCE_ID, { type: 'geojson', data: lastGeojson });
   }
@@ -121,10 +122,11 @@ function ensureLayer(map) {
       }
     });
   }
+  return Boolean(map.getLayer(LAYER_ID));
 }
 
 function syncLayerAppearance(map) {
-  ensureLayer(map);
+  if (!ensureLayer(map)) return false;
   const visible = state.bathyMode === 'aoi-adaptive' ? 'visible' : 'none';
   if (map.getLayer(LAYER_ID)) {
     map.setLayoutProperty(LAYER_ID, 'visibility', visible);
@@ -132,12 +134,41 @@ function syncLayerAppearance(map) {
     map.setPaintProperty(LAYER_ID, 'circle-opacity', currentOpacity());
   }
   if (map.getLayer(OUTLINE_ID)) map.setLayoutProperty(OUTLINE_ID, 'visibility', visible);
+  return true;
 }
 
 function render(map) {
-  syncLayerAppearance(map);
+  if (!syncLayerAppearance(map)) return false;
   const source = map.getSource(SOURCE_ID);
   if (source) source.setData(lastGeojson);
+  return Boolean(source && map.getLayer(LAYER_ID));
+}
+
+function scheduleRender(map) {
+  for (const timer of restoreTimers) clearTimeout(timer);
+  restoreTimers.clear();
+
+  const tryRender = attempt => {
+    if (map.isStyleLoaded()) {
+      try {
+        if (render(map)) return;
+      } catch {
+        // The style graph can still be settling immediately after setStyle().
+      }
+    }
+    if (attempt >= 12) return;
+    const timer = setTimeout(() => {
+      restoreTimers.delete(timer);
+      tryRender(attempt + 1);
+    }, 40 + attempt * 30);
+    restoreTimers.add(timer);
+  };
+
+  const timer = setTimeout(() => {
+    restoreTimers.delete(timer);
+    tryRender(0);
+  }, 0);
+  restoreTimers.add(timer);
 }
 
 function renderLegend() {
@@ -153,7 +184,7 @@ function clear(map, status) {
   requestGeneration++;
   lastGeojson = { type: 'FeatureCollection', features: [] };
   lastRange = null;
-  render(map);
+  scheduleRender(map);
   renderLegend();
   status.textContent = 'AOI REAL bathymetry: define an AOI.';
   status.className = 'status';
@@ -191,7 +222,7 @@ async function loadAoiGrid(map, aoi, status) {
 
   if (!valid.length) {
     lastRange = null;
-    render(map);
+    scheduleRender(map);
     renderLegend();
     status.textContent = 'AOI REAL bathymetry unavailable. No local colour surface is drawn; context WMS remains optional.';
     status.className = 'status warn';
@@ -202,7 +233,7 @@ async function loadAoiGrid(map, aoi, status) {
   const min = Math.min(...depths);
   const max = Math.max(...depths);
   lastRange = { min, max, samples: valid.length, source: 'REAL_EMODNET_REST' };
-  render(map);
+  scheduleRender(map);
   renderLegend();
   status.textContent = `AOI REAL bathymetry · ${valid.length}/${points.length} samples · adaptive ${min.toFixed(1)}–${max.toFixed(1)} m · native source ~${NATIVE_GRID_M} m`;
   status.className = 'status good';
@@ -270,7 +301,7 @@ const map = app.map;
 configureClientUi(app);
 const status = document.querySelector('#aoiDepthGridStatus');
 
-map.on('style.load', () => render(map));
+map.on('style.load', () => scheduleRender(map));
 ensureLayer(map);
 render(map);
 
@@ -282,9 +313,14 @@ subscribeState((next, patch) => {
     if (!next.aoi) clear(map, status);
     else loadAoiGrid(map, next.aoi, status);
   }
+  if (Object.prototype.hasOwnProperty.call(patch, 'baseMap')) {
+    // patchState(baseMap) is emitted immediately before setStyle(). Keep a
+    // bounded delayed restore alive across the style replacement.
+    scheduleRender(map);
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'bathyMode')) {
     syncContourUi(app);
-    render(map);
+    scheduleRender(map);
     renderLegend();
   }
   if (Object.prototype.hasOwnProperty.call(patch, 'bathymetry') && next.bathyMode === 'aoi-adaptive') {
