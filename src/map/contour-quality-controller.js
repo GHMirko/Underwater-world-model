@@ -54,6 +54,9 @@ function applyQualityPolicy() {
     // a full numeric raster has been acquired for the AOI.
     setVisibility(LOCAL_LAYER, ready && !recovery);
     setVisibility(RECOVERY_LAYER, ready && recovery && state.bathymetryGridSource !== 'EMODNET_WCS');
+    const densityFilter = state.contourDensity === 'major' ? ['==', ['get', 'major'], true] : null;
+    if (map.getLayer(LOCAL_LAYER)) map.setFilter(LOCAL_LAYER, densityFilter);
+    if (map.getLayer(RECOVERY_LAYER)) map.setFilter(RECOVERY_LAYER, densityFilter);
   } finally {
     applying = false;
   }
