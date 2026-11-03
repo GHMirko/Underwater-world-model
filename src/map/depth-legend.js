@@ -11,7 +11,10 @@ const WATER_STOPS = [
   { depth: 6000, color: '#062b55' }
 ];
 
+const AOI_ADAPTIVE_COLORS = ['#d9f3ff', '#98d9ef', '#52b6d8', '#2386bd', '#0b4f83'];
+
 export const CHART_RELIEF_STOPS = Object.freeze(WATER_STOPS.map(stop => Object.freeze({ ...stop })));
+export const AOI_ADAPTIVE_PALETTE = Object.freeze([...AOI_ADAPTIVE_COLORS]);
 
 export function chartReliefExpression() {
   const LSB = 1 / 256;
@@ -21,10 +24,6 @@ export function chartReliefExpression() {
     .reverse()
     .forEach(({ depth, color }) => expression.push(-depth, color));
 
-  // Seascape schema: v=0 is water with unknown depth, v=1 drying foreshore,
-  // v=2 land. Keep all non-negative categories transparent. The LayerManager
-  // places a coarse EMODnet sea-only raster underneath, so unknown-depth water
-  // can still show a visual fallback without ever redrawing land.
   expression.push(
     -LSB, '#f8fdff',
     0, 'rgba(248,253,255,0)',
@@ -34,24 +33,40 @@ export function chartReliefExpression() {
   return expression;
 }
 
+function rangeOf(bathymetry) {
+  if (!bathymetry || !Number.isFinite(bathymetry.min) || !Number.isFinite(bathymetry.max)) return null;
+  const min = Number(bathymetry.min);
+  const max = Number(bathymetry.max);
+  if (max < min) return null;
+  return { min, max: max === min ? min + 0.1 : max };
+}
+
+function adaptiveTicks(range, count = 5) {
+  const span = range.max - range.min;
+  return Array.from({ length: count }, (_, index) => {
+    const value = range.min + (span * index) / (count - 1);
+    return `${value.toFixed(span < 20 ? 1 : 0)}`;
+  });
+}
+
 const MODE_LEGENDS = {
   'chart-relief': {
-    title: 'Depth shading',
-    subtitle: 'Seascape DEM · EMODnet visual gap-fill where depth is unknown',
+    title: 'Depth context',
+    subtitle: 'Seascape DEM · EMODnet gap-fill · visual context only',
     colors: CHART_RELIEF_STOPS.map(stop => stop.color),
     ticks: ['0', '20', '50', '100', '200', '500', '1k', '2k', '4k', '6k+'],
     quantitative: true
   },
   'emodnet-rainbow': {
-    title: 'EMODnet depth',
-    subtitle: 'sea-only rainbow WMS · native grid ~115 m',
+    title: 'EMODnet context depth',
+    subtitle: 'rainbow WMS · context only · native grid ~115 m',
     colors: ['#d73027', '#fc8d59', '#fee08b', '#d9ef8b', '#91cf60', '#1a9850', '#2c7bb6'],
     ticks: ['shallow', '', '', '', '', '', 'deep'],
     quantitative: false
   },
   'emodnet-multicolour': {
-    title: 'EMODnet depth',
-    subtitle: 'sea-only multicolour WMS · native grid ~115 m',
+    title: 'EMODnet context depth',
+    subtitle: 'multicolour WMS · context only · native grid ~115 m',
     colors: ['#d9f0ff', '#9ecae1', '#6baed6', '#4292c6', '#2171b5', '#084594'],
     ticks: ['shallow', '', '', '', '', 'deep'],
     quantitative: false
@@ -59,12 +74,26 @@ const MODE_LEGENDS = {
 };
 
 export function legendModel(mode, bathymetry = null) {
+  if (mode === 'aoi-adaptive') {
+    const range = rangeOf(bathymetry);
+    if (!range) return null;
+    return {
+      title: 'AOI REAL bathymetry',
+      subtitle: `EMODnet numeric samples · adaptive colour scale · native source ~115 m`,
+      colors: AOI_ADAPTIVE_COLORS,
+      ticks: adaptiveTicks(range),
+      quantitative: true,
+      range: `AOI colour scale: ${range.min.toFixed(1)}–${range.max.toFixed(1)} m`
+    };
+  }
+
   const base = MODE_LEGENDS[mode] ?? null;
   if (!base) return null;
-  const range = bathymetry && Number.isFinite(bathymetry.min) && Number.isFinite(bathymetry.max)
-    ? `AOI REAL: ${bathymetry.min.toFixed(0)}–${bathymetry.max.toFixed(0)} m`
+  const range = rangeOf(bathymetry);
+  const rangeText = range
+    ? `AOI REAL reference: ${range.min.toFixed(0)}–${range.max.toFixed(0)} m`
     : 'AOI range: not sampled';
-  return { ...base, range };
+  return { ...base, range: rangeText };
 }
 
 export function renderDepthLegend(element, mode, bathymetry = null) {
