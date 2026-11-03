@@ -11,6 +11,7 @@ export const state = {
   bathyMode: 'aoi-adaptive',
   contours: true,
   contourDensity: 'dense',
+  debugBathymetryGrid: false,
   assets: new Set(['SIM-UUV-A', 'SIM-UUV-B', 'SIM-USV-GW', 'SIM-GLIDER'])
 };
 

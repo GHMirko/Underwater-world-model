@@ -8,6 +8,7 @@ import { aoiDimensionsMeters, formatMeters, recommendedZoomForAoi, resolutionAss
 import { sampleAoiBathymetry } from './data/emodnet.js';
 import { DEFAULT_ENVIRONMENT_SELECTION, ENVIRONMENT_VARIABLES } from './data/source-registry.js';
 import { buildCopernicusPython, buildEnvironmentalRequest } from './data/environmental-request.js';
+import { buildWorldModelPackage } from './data/world-model-package.js';
 import { downloadJson, downloadText } from './data/download.js';
 import { ASSETS, DEFAULT_WEIGHTS, optimize } from './optimizer/core.js';
 import { state, patchState } from './state.js';
@@ -17,7 +18,7 @@ root.innerHTML = `
 <div class="app">
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
-    <span class="badge">GitHub v0.13 HR Bathymetry Selector</span>
+    <span class="badge">GitHub v0.18 Continuous Bathymetry + World Model Package</span>
     <span class="badge">MapLibre z22</span>
     <span class="badge">Resolution-aware Data Broker</span>
   </header>
@@ -39,13 +40,14 @@ root.innerHTML = `
           <option value="none">None</option>
         </select></div>
         <div class="field"><label>Bathymetry opacity</label><input id="depthOpacity" type="range" min="0" max="100" value="72"></div>
+        <label class="debug-control"><input id="debugBathymetryGrid" type="checkbox"> Debug numeric grid · engineering only</label>
         <label><input id="contours" type="checkbox" checked> Source-matched isobaths</label>
         <div class="field"><label>Isobath detail</label><select id="contourDensity">
           <option value="dense">Detailed where source supports it</option>
           <option value="major">Major only where source supports it</option>
         </select></div>
         <div id="contourStatus" class="status">Waiting for map…</div>
-        <div class="data-note">Land is rendered only by the selected base map. Isobaths follow the selected bathymetry source family; different bathymetric models are not silently mixed.</div>
+        <div class="data-note">Normal view uses a continuous display surface plus derived isobaths. The native numeric grid is hidden unless Debug is enabled; analytical consumers always use the numeric data layer, never the display texture.</div>
       </div>
 
       <div class="panel">
@@ -80,11 +82,12 @@ root.innerHTML = `
         <div id="envRequestStatus" class="status">Select an AOI, time/depth window and variables.</div>
         <div class="request-actions">
           <button id="downloadManifest" class="btn" disabled>Manifest JSON</button>
+          <button id="downloadWorldModel" class="btn" disabled>World Model package</button>
           <button id="downloadAoi" class="btn" disabled>AOI GeoJSON</button>
           <button id="downloadCopernicus" class="btn" disabled>Copernicus job</button>
           <a id="openBathymetry" class="btn btn-link disabled-link" target="_blank" rel="noreferrer">Bathymetry source</a>
         </div>
-        <div class="data-note">REAL gate remains OPEN until source jobs are executed and validated. Coarse sources are context-sampled around micro-AOIs; resampling does not create new environmental information.</div>
+        <div class="data-note">The World Model Package links view layers to analytical sources, provenance, quality and standardized extraction jobs. REAL gate remains OPEN until source jobs are executed and validated.</div>
       </div>
 
       <div class="panel">
@@ -137,6 +140,7 @@ document.querySelector('#envVariables').innerHTML = DEFAULT_ENVIRONMENT_SELECTIO
 
 function setRequestButtons(enabled) {
   document.querySelector('#downloadManifest').disabled = !enabled;
+  document.querySelector('#downloadWorldModel').disabled = !enabled;
   document.querySelector('#downloadAoi').disabled = !enabled;
   document.querySelector('#downloadCopernicus').disabled = !enabled;
   const bathy = document.querySelector('#openBathymetry');
@@ -335,6 +339,11 @@ document.querySelector('#downloadManifest').addEventListener('click', () => {
   if (currentEnvRequest) downloadJson('environmental-request.json', currentEnvRequest);
 });
 
+document.querySelector('#downloadWorldModel').addEventListener('click', () => {
+  if (!currentEnvRequest) return;
+  downloadJson('world-model-aoi-package.json', buildWorldModelPackage({ state, environmentalRequest: currentEnvRequest }));
+});
+
 document.querySelector('#downloadAoi').addEventListener('click', () => {
   if (currentEnvRequest) downloadJson('aoi.geojson', currentEnvRequest.geometry);
 });
@@ -376,4 +385,4 @@ document.querySelector('#optimize').addEventListener('click', () => {
 updateLegend();
 setRequestButtons(false);
 renderSpatialAdequacy();
-window.__MSO__ = { map, layers, contours, aoi, state, updateLegend, fitToAoi, buildEnvironmentalRequest, aoiDimensionsMeters, resolutionAssessment };
+window.__MSO__ = { map, layers, contours, aoi, state, updateLegend, fitToAoi, buildEnvironmentalRequest, buildWorldModelPackage, aoiDimensionsMeters, resolutionAssessment };

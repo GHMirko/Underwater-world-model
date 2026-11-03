@@ -85,6 +85,10 @@ function currentOpacity() {
   return slider ? Math.max(0, Math.min(1, Number(slider.value) / 100)) : 0.72;
 }
 
+function numericGridVisible() {
+  return state.bathyMode === 'aoi-adaptive' && Boolean(state.debugBathymetryGrid);
+}
+
 function clearContourMarkers() {
   for (const marker of contourMarkers) marker.remove();
   contourMarkers = [];
@@ -98,10 +102,10 @@ function ensureLayer(map) {
   if (!map.isStyleLoaded()) return false;
   if (!map.getSource(SOURCE_ID)) map.addSource(SOURCE_ID, { type: 'geojson', data: lastGeojson });
   if (!map.getLayer(LAYER_ID)) {
-    map.addLayer({ id: LAYER_ID, type: 'circle', source: SOURCE_ID, layout: { visibility: state.bathyMode === 'aoi-adaptive' ? 'visible' : 'none' }, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 2, 16, 4, 18, 7, 21, 13], 'circle-color': adaptiveColorExpression(), 'circle-opacity': currentOpacity(), 'circle-blur': 0.08, 'circle-stroke-color': 'rgba(255,255,255,0.78)', 'circle-stroke-width': 0.8 } });
+    map.addLayer({ id: LAYER_ID, type: 'circle', source: SOURCE_ID, layout: { visibility: numericGridVisible() ? 'visible' : 'none' }, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 2, 16, 4, 18, 7, 21, 13], 'circle-color': adaptiveColorExpression(), 'circle-opacity': currentOpacity(), 'circle-blur': 0.08, 'circle-stroke-color': 'rgba(255,255,255,0.78)', 'circle-stroke-width': 0.8 } });
   }
   if (!map.getLayer(OUTLINE_ID)) {
-    map.addLayer({ id: OUTLINE_ID, type: 'circle', source: SOURCE_ID, layout: { visibility: state.bathyMode === 'aoi-adaptive' ? 'visible' : 'none' }, paint: { 'circle-radius': 1.8, 'circle-color': '#ffffff', 'circle-opacity': 0.9, 'circle-stroke-color': '#123244', 'circle-stroke-width': 0.8 } });
+    map.addLayer({ id: OUTLINE_ID, type: 'circle', source: SOURCE_ID, layout: { visibility: numericGridVisible() ? 'visible' : 'none' }, paint: { 'circle-radius': 1.8, 'circle-color': '#ffffff', 'circle-opacity': 0.9, 'circle-stroke-color': '#123244', 'circle-stroke-width': 0.8 } });
   }
   if (!map.getSource(CONTOUR_SOURCE_ID)) map.addSource(CONTOUR_SOURCE_ID, { type: 'geojson', data: lastContourGeojson });
   if (!map.getLayer(CONTOUR_LAYER_ID)) {
@@ -136,7 +140,7 @@ function renderContourLabels(map) {
 
 function syncLayerAppearance(map) {
   if (!ensureLayer(map)) return false;
-  const numericVisibility = state.bathyMode === 'aoi-adaptive' ? 'visible' : 'none';
+  const numericVisibility = numericGridVisible() ? 'visible' : 'none';
   if (map.getLayer(LAYER_ID)) {
     map.setLayoutProperty(LAYER_ID, 'visibility', numericVisibility);
     map.setPaintProperty(LAYER_ID, 'circle-color', adaptiveColorExpression());
@@ -296,8 +300,6 @@ function configureClientUi(app) {
   layers.setBathymetry(state.bathyMode);
   syncContourUi(app);
   renderLegend();
-  const firstBadge = document.querySelector('.header .badge');
-  if (firstBadge) firstBadge.textContent = 'GitHub v0.16 Confidence-Aware Contours';
   const sourceStatus = document.querySelector('#bathySourceStatus');
   if (sourceStatus && !document.querySelector('#aoiDepthGridStatus')) {
     const status = document.createElement('div');
@@ -306,8 +308,6 @@ function configureClientUi(app) {
     status.textContent = 'AOI REAL bathymetry: define an AOI.';
     sourceStatus.insertAdjacentElement('afterend', status);
   }
-  const mapNote = document.querySelector('.panel .data-note');
-  if (mapNote) mapNote.textContent = 'Background/land and sea data are separate. AOI REAL bathymetry drives adaptive local isobaths. Every derived contour carries source, native resolution, coverage, confidence and fitness-for-use metadata.';
 }
 
 const app = await waitForApp();
@@ -326,6 +326,7 @@ subscribeState((next, patch) => {
   if (Object.prototype.hasOwnProperty.call(patch, 'aoi')) { if (!next.aoi) clear(map, status); else loadAoiGrid(map, next.aoi, status); }
   if (Object.prototype.hasOwnProperty.call(patch, 'baseMap')) scheduleRender(map);
   if (Object.prototype.hasOwnProperty.call(patch, 'bathyMode')) { syncContourUi(app); scheduleRender(map); renderLegend(); }
+  if (Object.prototype.hasOwnProperty.call(patch, 'debugBathymetryGrid')) scheduleRender(map);
   if (Object.prototype.hasOwnProperty.call(patch, 'contours') || Object.prototype.hasOwnProperty.call(patch, 'contourDensity')) {
     if (next.bathyMode === 'aoi-adaptive') { scheduleRender(map); renderLocalContourStatus(); }
   }

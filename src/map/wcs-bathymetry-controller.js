@@ -45,6 +45,10 @@ function currentOpacity() {
   return slider ? Math.max(0.12, Math.min(0.92, Number(slider.value) / 100)) : 0.72;
 }
 
+function numericGridVisible() {
+  return state.bathyMode === 'aoi-adaptive' && Boolean(lastGrid) && Boolean(state.debugBathymetryGrid);
+}
+
 function adaptiveExpression(range) {
   if (!range || !Number.isFinite(range.min) || !Number.isFinite(range.max)) return '#52b6d8';
   const min = range.min;
@@ -103,7 +107,7 @@ function ensureGridLayer(map) {
       id: GRID_LAYER,
       type: 'fill',
       source: GRID_SOURCE,
-      layout: { visibility: state.bathyMode === 'aoi-adaptive' && lastGrid ? 'visible' : 'none' },
+      layout: { visibility: numericGridVisible() ? 'visible' : 'none' },
       paint: {
         'fill-color': adaptiveExpression(lastGrid),
         'fill-opacity': currentOpacity(),
@@ -116,7 +120,7 @@ function ensureGridLayer(map) {
       id: COASTAL_LAYER,
       type: 'circle',
       source: GRID_SOURCE,
-      layout: { visibility: state.bathyMode === 'aoi-adaptive' && lastGrid ? 'visible' : 'none' },
+      layout: { visibility: numericGridVisible() ? 'visible' : 'none' },
       paint: {
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 2.5, 16, 5, 19, 9, 22, 15],
         'circle-color': adaptiveExpression(lastGrid),
@@ -133,7 +137,7 @@ function renderGrid(map) {
   if (!ensureGridLayer(map)) return;
   const source = map.getSource(GRID_SOURCE);
   if (source) source.setData(gridGeojson);
-  const visible = state.bathyMode === 'aoi-adaptive' && lastGrid ? 'visible' : 'none';
+  const visible = numericGridVisible() ? 'visible' : 'none';
   if (map.getLayer(GRID_LAYER)) {
     map.setLayoutProperty(GRID_LAYER, 'visibility', visible);
     map.setPaintProperty(GRID_LAYER, 'fill-color', adaptiveExpression(lastGrid));
@@ -337,9 +341,6 @@ window.__MSO__.getWcsLocalContours = () => wcsContours;
 statusElement();
 ensureGridLayer(map);
 
-const badge = document.querySelector('.header .badge');
-if (badge) badge.textContent = 'GitHub v0.17.2 Coastal Mask + Shallow Water';
-
 const opacitySlider = document.querySelector('#depthOpacity');
 if (opacitySlider) opacitySlider.addEventListener('input', () => renderGrid(map));
 
@@ -351,7 +352,7 @@ subscribeState((next, patch) => {
   if (Object.prototype.hasOwnProperty.call(patch, 'baseMap')) {
     setTimeout(() => { renderGrid(map); renderContourLabels(map); }, 120);
   }
-  if (Object.prototype.hasOwnProperty.call(patch, 'bathyMode')) {
+  if (Object.prototype.hasOwnProperty.call(patch, 'bathyMode') || Object.prototype.hasOwnProperty.call(patch, 'debugBathymetryGrid')) {
     renderGrid(map);
     renderLegend();
     renderContourLabels(map);
