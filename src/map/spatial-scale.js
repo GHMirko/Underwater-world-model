@@ -1,5 +1,6 @@
 const EARTH_RADIUS_M = 6371008.8;
 const WEB_MERCATOR_METERS_PER_PIXEL_Z0 = 156543.03392804097;
+const METERS_PER_DEG_LAT = 111320;
 
 function toRad(value) {
   return value * Math.PI / 180;
@@ -26,7 +27,8 @@ export function aoiDimensionsMeters(aoi) {
     area: width * height,
     minDimension: Math.min(width, height),
     maxDimension: Math.max(width, height),
-    centerLat: midLat
+    centerLat: midLat,
+    centerLon: midLon
   };
 }
 
@@ -50,6 +52,20 @@ export function resolutionAssessment(aoi, nativeResolutionM) {
   if (cellsAcrossMax < 1) status = 'UNRESOLVED';
   else if (cellsAcrossMin < 4) status = 'COARSE';
   return { status, cellsAcrossMin, cellsAcrossMax };
+}
+
+export function expandAoiByMeters(aoi, bufferM) {
+  if (!aoi || !Number.isFinite(bufferM) || bufferM <= 0) return { ...aoi };
+  const dimensions = aoiDimensionsMeters(aoi);
+  const latPad = bufferM / METERS_PER_DEG_LAT;
+  const lonMetersPerDegree = METERS_PER_DEG_LAT * Math.max(0.05, Math.cos(toRad(dimensions.centerLat)));
+  const lonPad = bufferM / lonMetersPerDegree;
+  return {
+    minLon: Math.max(-180, aoi.minLon - lonPad),
+    maxLon: Math.min(180, aoi.maxLon + lonPad),
+    minLat: Math.max(-85, aoi.minLat - latPad),
+    maxLat: Math.min(85, aoi.maxLat + latPad)
+  };
 }
 
 export function formatMeters(value) {
