@@ -161,7 +161,8 @@ async function loadAoiGrid(map, aoi, status) {
   status.className = 'status good';
 }
 
-function configureClientUi(map) {
+function configureClientUi(app) {
+  const { map, layers, contours, updateLegend } = app;
   const select = document.querySelector('#baseMap');
   if (select) {
     [...select.options].forEach(option => {
@@ -173,6 +174,16 @@ function configureClientUi(map) {
     }
     select.value = state.baseMap;
   }
+
+  // app.js builds the selects before reading the state defaults. Synchronize
+  // the visible control and the LayerManager explicitly so UI, state and
+  // rendered sea-data source cannot diverge.
+  const bathySelect = document.querySelector('#bathyMode');
+  if (bathySelect) bathySelect.value = state.bathyMode;
+  layers.setBathymetry(state.bathyMode);
+  contours.setBathymetryMode(state.bathyMode);
+  updateLegend();
+
   const firstBadge = document.querySelector('.header .badge');
   if (firstBadge) firstBadge.textContent = 'GitHub v0.14 Client Cartography';
 
@@ -191,7 +202,7 @@ function configureClientUi(map) {
 
 const app = await waitForApp();
 const map = app.map;
-configureClientUi(map);
+configureClientUi(app);
 const status = document.querySelector('#aoiDepthGridStatus');
 
 map.on('style.load', () => render(map));
