@@ -28,11 +28,11 @@ async function drawAoi(page, from = { x: 180, y: 180 }, to = { x: 430, y: 360 })
   await expect(page.locator('#aoiStatus')).not.toContainText('No AOI selected');
 }
 
-test('critical flow derives confidence-aware adaptive isobaths from AOI numeric bathymetry', async ({ page }) => {
+test('critical flow keeps numeric grids as debug while preserving confidence-aware contours and extraction contracts', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await expect(page.locator('.header .badge').first()).toContainText('v0.16 Confidence-Aware Contours');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.18');
   await expect(page.locator('#baseMap option')).toHaveCount(2);
   await expect(page.locator('#baseMap')).toContainText('Minimal');
   await expect(page.locator('#baseMap')).toContainText('Satellite');
@@ -42,6 +42,7 @@ test('critical flow derives confidence-aware adaptive isobaths from AOI numeric 
   await expect(page.locator('#depthLegend')).toBeHidden();
   await expect(page.locator('#contours')).toBeEnabled();
   await expect(page.locator('#contourDensity')).toBeEnabled();
+  await expect(page.locator('#debugBathymetryGrid')).not.toBeChecked();
   await expect(page.locator('#contourStatus')).toContainText('waiting');
 
   await page.evaluate(() => window.__MSO__.map.setZoom(17));
@@ -64,6 +65,7 @@ test('critical flow derives confidence-aware adaptive isobaths from AOI numeric 
     contourCount: window.__MSO__.getLocalContours().features.length,
     firstContour: window.__MSO__.getLocalContours().features[0]?.properties ?? null,
     numeric: Boolean(window.__MSO__.map.getLayer('aoi-depth-grid-layer')),
+    numericVisibility: window.__MSO__.map.getLayoutProperty('aoi-depth-grid-layer', 'visibility'),
     contours: Boolean(window.__MSO__.map.getLayer('aoi-derived-contours-layer')),
     contourVisibility: window.__MSO__.map.getLayoutProperty('aoi-derived-contours-layer', 'visibility'),
     wms: Boolean(window.__MSO__.map.getLayer('bathymetry-layer'))
@@ -76,9 +78,19 @@ test('critical flow derives confidence-aware adaptive isobaths from AOI numeric 
   expect(wm.firstContour.layer_class).toBe('DERIVED');
   expect(wm.firstContour.derivation).toBe('MARCHING_SQUARES_NUMERIC_GRID');
   expect(wm.numeric).toBe(true);
+  expect(wm.numericVisibility).toBe('none');
   expect(wm.contours).toBe(true);
   expect(wm.contourVisibility).toBe('visible');
   expect(wm.wms).toBe(false);
+
+  await page.locator('#debugBathymetryGrid').check();
+  await page.waitForTimeout(120);
+  const debugVisible = await page.evaluate(() => window.__MSO__.map.getLayoutProperty('aoi-depth-grid-layer', 'visibility'));
+  expect(debugVisible).toBe('visible');
+  await page.locator('#debugBathymetryGrid').uncheck();
+  await page.waitForTimeout(120);
+  const debugHidden = await page.evaluate(() => window.__MSO__.map.getLayoutProperty('aoi-depth-grid-layer', 'visibility'));
+  expect(debugHidden).toBe('none');
 
   const zoomAfterAoi = await page.evaluate(() => window.__MSO__.map.getZoom());
   expect(zoomAfterAoi).toBeGreaterThanOrEqual(zoomBeforeAoi);
@@ -102,10 +114,12 @@ test('critical flow derives confidence-aware adaptive isobaths from AOI numeric 
   await expect(page.locator('#baseMap')).toHaveValue('satellite');
   const afterBasemap = await page.evaluate(() => ({
     numeric: Boolean(window.__MSO__.map.getLayer('aoi-depth-grid-layer')),
+    numericVisibility: window.__MSO__.map.getLayoutProperty('aoi-depth-grid-layer', 'visibility'),
     contours: Boolean(window.__MSO__.map.getLayer('aoi-derived-contours-layer')),
     contourVisibility: window.__MSO__.map.getLayoutProperty('aoi-derived-contours-layer', 'visibility')
   }));
   expect(afterBasemap.numeric).toBe(true);
+  expect(afterBasemap.numericVisibility).toBe('none');
   expect(afterBasemap.contours).toBe(true);
   expect(afterBasemap.contourVisibility).toBe('visible');
   await expect(page.locator('#depthLegend')).toContainText('AOI colour scale');
@@ -132,6 +146,7 @@ test('critical flow derives confidence-aware adaptive isobaths from AOI numeric 
   await page.locator('#buildEnvRequest').click();
   await expect(page.locator('#envRequestStatus')).toContainText('SOURCE-RESOLVED');
   await expect(page.locator('#downloadManifest')).toBeEnabled();
+  await expect(page.locator('#downloadWorldModel')).toBeEnabled();
 
   await page.locator('#optimize').click();
   await expect(page.locator('#results .result').first()).toBeVisible();
