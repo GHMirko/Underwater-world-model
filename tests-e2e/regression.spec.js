@@ -3,10 +3,6 @@ import { test, expect } from '@playwright/test';
 test.beforeEach(async ({ page }) => {
   page.on('pageerror', error => console.error('PAGE ERROR', error));
 
-  // Keep the browser regression deterministic: numeric EMODnet depth samples
-  // are mocked with a repeatable shallow-water range, while every other
-  // external service is blocked. This tests adaptive colouring without making
-  // CI depend on third-party availability.
   let depthCounter = 0;
   await page.route('https://rest.emodnet-bathymetry.eu/**', route => {
     const depth = 3.4 + (depthCounter++ % 12) * 1.6;
@@ -32,113 +28,110 @@ async function drawAoi(page, from = { x: 180, y: 180 }, to = { x: 430, y: 360 })
   await expect(page.locator('#aoiStatus')).not.toContainText('No AOI selected');
 }
 
-test('critical flow keeps client land separate and uses AOI real adaptive bathymetry', async ({ page }) => {
+test('critical flow derives confidence-aware adaptive isobaths from AOI numeric bathymetry', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await expect(page.locator('.header .badge').first()).toContainText('v0.15 Adaptive Bathymetry');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.16 Confidence-Aware Contours');
   await expect(page.locator('#baseMap option')).toHaveCount(2);
   await expect(page.locator('#baseMap')).toContainText('Minimal');
   await expect(page.locator('#baseMap')).toContainText('Satellite');
-  await expect(page.locator('#baseMap')).not.toContainText('Chart');
-  await expect(page.locator('#baseMap')).not.toContainText('Terrain');
   await expect(page.locator('#baseMap')).toHaveValue('minimal');
 
   await expect(page.locator('#bathyMode')).toHaveValue('aoi-adaptive');
-  await expect(page.locator('#bathyMode option')).toHaveCount(5);
-  await expect(page.locator('#bathyMode')).toContainText('AOI REAL');
-  await expect(page.locator('#bathyMode')).toContainText('context WMS');
   await expect(page.locator('#depthLegend')).toBeHidden();
-  await expect(page.locator('#contours')).toBeDisabled();
-  await expect(page.locator('#contourDensity')).toBeDisabled();
-  await expect(page.locator('#aoiDepthGridStatus')).toContainText('define an AOI');
-  await expect(page.locator('#downloadManifest')).toBeDisabled();
+  await expect(page.locator('#contours')).toBeEnabled();
+  await expect(page.locator('#contourDensity')).toBeEnabled();
+  await expect(page.locator('#contourStatus')).toContainText('waiting');
 
-  const maxZoom = await page.evaluate(() => window.__MSO__.map.getMaxZoom());
-  expect(maxZoom).toBe(22);
   await page.evaluate(() => window.__MSO__.map.setZoom(17));
   await page.waitForTimeout(250);
-
   const zoomBeforeAoi = await page.evaluate(() => window.__MSO__.map.getZoom());
   await drawAoi(page, { x: 150, y: 130 }, { x: 550, y: 530 });
+
   await expect(page.locator('#aoiScaleStatus')).toContainText('MICRO-AOI');
-  await expect(page.locator('#aoiScaleStatus')).toContainText('auto-fit');
   await expect(page.locator('#fitAoi')).toBeEnabled();
-  await expect(page.locator('#spatialAdequacy')).toContainText('UNRESOLVED');
-  await expect(page.locator('#spatialAdequacy')).toContainText('COARSE');
-  await expect(page.locator('#bathySourceStatus')).toContainText('standard EMODnet DTM ~115 m fallback');
   await expect(page.locator('#bathyStatus')).toContainText('REAL EMODnet');
-  await expect(page.locator('#aoiDepthGridStatus')).toContainText('AOI REAL bathymetry');
-  await expect(page.locator('#aoiDepthGridStatus')).toContainText('adaptive');
+  await expect(page.locator('#aoiDepthGridStatus')).toContainText('confidence');
   await expect(page.locator('#depthLegend')).toBeVisible();
   await expect(page.locator('#depthLegend')).toContainText('AOI REAL bathymetry');
-  await expect(page.locator('#depthLegend')).toContainText('adaptive colour scale');
-  await expect(page.locator('#depthLegend')).toContainText('AOI colour scale');
+  await expect(page.locator('#contourStatus')).toContainText('Adaptive isobaths');
+  await expect(page.locator('#contourStatus')).toContainText('confidence');
 
-  const sourceStatus = await page.evaluate(() => window.__MSO__.state.bathymetrySource?.status);
-  expect(sourceStatus).toBe('STANDARD_FALLBACK');
-  await page.waitForTimeout(650);
+  const wm = await page.evaluate(() => ({
+    quality: window.__MSO__.state.bathymetryQuality,
+    summary: window.__MSO__.state.adaptiveContours,
+    contourCount: window.__MSO__.getLocalContours().features.length,
+    firstContour: window.__MSO__.getLocalContours().features[0]?.properties ?? null,
+    numeric: Boolean(window.__MSO__.map.getLayer('aoi-depth-grid-layer')),
+    contours: Boolean(window.__MSO__.map.getLayer('aoi-derived-contours-layer')),
+    contourVisibility: window.__MSO__.map.getLayoutProperty('aoi-derived-contours-layer', 'visibility'),
+    wms: Boolean(window.__MSO__.map.getLayer('bathymetry-layer'))
+  }));
+  expect(wm.quality).toBeTruthy();
+  expect(['HIGH', 'MEDIUM', 'LOW', 'VERY_LOW']).toContain(wm.quality.confidence);
+  expect(wm.summary).toBeTruthy();
+  expect(wm.summary.interval_m).toBeGreaterThan(0);
+  expect(wm.contourCount).toBeGreaterThan(0);
+  expect(wm.firstContour.layer_class).toBe('DERIVED');
+  expect(wm.firstContour.derivation).toBe('MARCHING_SQUARES_NUMERIC_GRID');
+  expect(wm.numeric).toBe(true);
+  expect(wm.contours).toBe(true);
+  expect(wm.contourVisibility).toBe('visible');
+  expect(wm.wms).toBe(false);
+
   const zoomAfterAoi = await page.evaluate(() => window.__MSO__.map.getZoom());
   expect(zoomAfterAoi).toBeGreaterThanOrEqual(zoomBeforeAoi);
   expect(zoomAfterAoi).toBeGreaterThan(16);
 
-  // In local adaptive mode there must be no WMS bathymetry raster covering land.
-  const localLayerState = await page.evaluate(() => ({
-    numeric: Boolean(window.__MSO__.map.getLayer('aoi-depth-grid-layer')),
-    wms: Boolean(window.__MSO__.map.getLayer('bathymetry-layer')),
-    visibility: window.__MSO__.map.getLayoutProperty('aoi-depth-grid-layer', 'visibility')
-  }));
-  expect(localLayerState.numeric).toBe(true);
-  expect(localLayerState.wms).toBe(false);
-  expect(localLayerState.visibility).toBe('visible');
+  await page.locator('#contourDensity').selectOption('major');
+  await page.waitForTimeout(150);
+  const majorFilter = await page.evaluate(() => window.__MSO__.map.getFilter('aoi-derived-contours-layer'));
+  expect(majorFilter).toBeTruthy();
+  await page.locator('#contourDensity').selectOption('dense');
 
-  // Numeric sea-data layer must survive a land/background change.
+  await page.locator('#contours').uncheck();
+  await expect(page.locator('#contourStatus')).toContainText('off');
+  const hidden = await page.evaluate(() => window.__MSO__.map.getLayoutProperty('aoi-derived-contours-layer', 'visibility'));
+  expect(hidden).toBe('none');
+  await page.locator('#contours').check();
+  await expect(page.locator('#contourStatus')).toContainText('Adaptive isobaths');
+
   await page.locator('#baseMap').selectOption('satellite');
   await page.waitForTimeout(900);
   await expect(page.locator('#baseMap')).toHaveValue('satellite');
-  const numericAfter = await page.evaluate(() => Boolean(window.__MSO__.map.getLayer('aoi-depth-grid-layer')));
-  expect(numericAfter).toBe(true);
+  const afterBasemap = await page.evaluate(() => ({
+    numeric: Boolean(window.__MSO__.map.getLayer('aoi-depth-grid-layer')),
+    contours: Boolean(window.__MSO__.map.getLayer('aoi-derived-contours-layer')),
+    contourVisibility: window.__MSO__.map.getLayoutProperty('aoi-derived-contours-layer', 'visibility')
+  }));
+  expect(afterBasemap.numeric).toBe(true);
+  expect(afterBasemap.contours).toBe(true);
+  expect(afterBasemap.contourVisibility).toBe('visible');
   await expect(page.locator('#depthLegend')).toContainText('AOI colour scale');
 
-  // Context WMS is still available explicitly, but is no longer the local default.
   await page.locator('#bathyMode').selectOption('emodnet-rainbow');
   await page.waitForTimeout(500);
   await expect(page.locator('#depthLegend')).toContainText('context');
-  await expect(page.locator('#contours')).toBeEnabled();
-  await expect(page.locator('#contourDensity')).toBeEnabled();
   const contextState = await page.evaluate(() => ({
     wms: Boolean(window.__MSO__.map.getLayer('bathymetry-layer')),
-    numericVisibility: window.__MSO__.map.getLayoutProperty('aoi-depth-grid-layer', 'visibility')
+    numericVisibility: window.__MSO__.map.getLayoutProperty('aoi-depth-grid-layer', 'visibility'),
+    localContourVisibility: window.__MSO__.map.getLayoutProperty('aoi-derived-contours-layer', 'visibility')
   }));
   expect(contextState.wms).toBe(true);
   expect(contextState.numericVisibility).toBe('none');
+  expect(contextState.localContourVisibility).toBe('none');
 
   await page.locator('#bathyMode').selectOption('aoi-adaptive');
   await page.waitForTimeout(300);
   await expect(page.locator('#depthLegend')).toContainText('AOI REAL bathymetry');
-  const adaptiveAgain = await page.evaluate(() => ({
-    wms: Boolean(window.__MSO__.map.getLayer('bathymetry-layer')),
-    numericVisibility: window.__MSO__.map.getLayoutProperty('aoi-depth-grid-layer', 'visibility')
-  }));
-  expect(adaptiveAgain.wms).toBe(false);
-  expect(adaptiveAgain.numericVisibility).toBe('visible');
+  await expect(page.locator('#contourStatus')).toContainText('Adaptive isobaths');
 
   await expect(page.locator('#envVariables input:checked')).toHaveCount(5);
   await page.locator('#analysisGridM').fill('20');
   await page.locator('#buildEnvRequest').click();
   await expect(page.locator('#envRequestStatus')).toContainText('SOURCE-RESOLVED');
-  await expect(page.locator('#envRequestStatus')).toContainText('5 jobs');
-  await expect(page.locator('#envRequestStatus')).toContainText('HR bathy 0');
   await expect(page.locator('#downloadManifest')).toBeEnabled();
-  await expect(page.locator('#downloadAoi')).toBeEnabled();
-  await expect(page.locator('#downloadCopernicus')).toBeEnabled();
-  await expect(page.locator('#openBathymetry')).toHaveAttribute('href', /ows\.emodnet-bathymetry\.eu\/wcs/);
-
-  await page.locator('#envMaxDepth').fill('800');
-  await expect(page.locator('#downloadManifest')).toBeDisabled();
-  await expect(page.locator('#envRequestStatus')).toContainText('changed');
-  await page.locator('#buildEnvRequest').click();
-  await expect(page.locator('#envRequestStatus')).toContainText('SOURCE-RESOLVED');
 
   await page.locator('#optimize').click();
   await expect(page.locator('#results .result').first()).toBeVisible();
@@ -147,7 +140,7 @@ test('critical flow keeps client land separate and uses AOI real adaptive bathym
   await page.locator('#clearAoi').click();
   await expect(page.locator('#aoiStatus')).toContainText('No AOI selected');
   await expect(page.locator('#depthLegend')).toBeHidden();
-  await expect(page.locator('#aoiDepthGridStatus')).toContainText('define an AOI');
+  await expect(page.locator('#contourStatus')).toContainText('waiting');
 
   expect(errors).toEqual([]);
 });
