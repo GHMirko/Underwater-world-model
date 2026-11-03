@@ -2,22 +2,26 @@ export const BASEMAPS = {
   chart: {
     name: 'Chart',
     tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}'],
-    attribution: 'Esri Ocean'
+    attribution: 'Esri Ocean',
+    nativeMaxZoom: 16
   },
   satellite: {
     name: 'Satellite',
     tiles: ['https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
-    attribution: 'Esri World Imagery'
+    attribution: 'Esri World Imagery',
+    nativeMaxZoom: 20
   },
   terrain: {
     name: 'Terrain',
     tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}'],
-    attribution: 'Esri Terrain'
+    attribution: 'Esri Terrain',
+    nativeMaxZoom: 16
   },
   minimal: {
     name: 'Minimal',
     tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'],
-    attribution: 'Esri Light Gray'
+    attribution: 'Esri Light Gray',
+    nativeMaxZoom: 16
   }
 };
 
