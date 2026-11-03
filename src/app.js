@@ -17,7 +17,7 @@ root.innerHTML = `
 <div class="app">
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
-    <span class="badge">GitHub v0.11 Cartography Coherence</span>
+    <span class="badge">GitHub v0.13 HR Bathymetry Selector</span>
     <span class="badge">MapLibre z22</span>
     <span class="badge">Resolution-aware Data Broker</span>
   </header>
@@ -58,6 +58,7 @@ root.innerHTML = `
         <div id="aoiStatus" class="status">No AOI selected.</div>
         <div id="aoiScaleStatus" class="status">Viewer supports zoom to level 22. AOI is auto-fitted after drawing; analysis resolution remains source-dependent.</div>
         <div id="bathyStatus" class="status">Bathymetry will be sampled automatically after AOI selection.</div>
+        <div id="bathySourceStatus" class="status">Bathymetry source: define an AOI for HR-DTM discovery.</div>
         <div class="field"><label>Mission</label><select id="mission"><option>ASW</option><option>MCM</option><option>REA</option></select></div>
         <div class="field"><label>Max operating depth (m)</label><input id="maxDepth" type="number" value="500" min="0"></div>
       </div>
@@ -81,7 +82,7 @@ root.innerHTML = `
           <button id="downloadManifest" class="btn" disabled>Manifest JSON</button>
           <button id="downloadAoi" class="btn" disabled>AOI GeoJSON</button>
           <button id="downloadCopernicus" class="btn" disabled>Copernicus job</button>
-          <a id="openBathymetry" class="btn btn-link disabled-link" target="_blank" rel="noreferrer">EMODnet bathy</a>
+          <a id="openBathymetry" class="btn btn-link disabled-link" target="_blank" rel="noreferrer">Bathymetry source</a>
         </div>
         <div class="data-note">REAL gate remains OPEN until source jobs are executed and validated. Coarse sources are context-sampled around micro-AOIs; resampling does not create new environmental information.</div>
       </div>
@@ -165,8 +166,11 @@ function renderSpatialAdequacy() {
   }
   const rows = selectedEnvironmentVariables().map(id => {
     const variable = ENVIRONMENT_VARIABLES[id];
-    const assessment = resolutionAssessment(state.aoi, variable.nativeHorizontalResolutionM);
-    const resolution = Number.isFinite(variable.nativeHorizontalResolutionM) ? formatMeters(variable.nativeHorizontalResolutionM) : 'variable / metadata required';
+    const selectedBathyResolution = id === 'bathymetry' && Number.isFinite(state.bathymetrySource?.native_horizontal_resolution_m)
+      ? state.bathymetrySource.native_horizontal_resolution_m
+      : variable.nativeHorizontalResolutionM;
+    const assessment = resolutionAssessment(state.aoi, selectedBathyResolution);
+    const resolution = Number.isFinite(selectedBathyResolution) ? formatMeters(selectedBathyResolution) : 'variable / metadata required';
     const cells = assessment.cellsAcrossMin == null ? '' : ` · ${assessment.cellsAcrossMin.toFixed(1)} cells across short side`;
     return `<div class="adequacy-row ${assessment.status.toLowerCase()}"><b>${variable.label}</b><span>${assessment.status} · native ${resolution}${cells}</span></div>`;
   });
@@ -203,8 +207,6 @@ async function onAoiChanged(aoiValue) {
   invalidateEnvRequest(aoiValue ? 'AOI defined. Configure environmental request and build it.' : 'Select an AOI first.');
   if (!aoiValue) return;
 
-  // AOI is the operational focus. Fit it immediately after drawing instead of
-  // forcing the user to zoom manually, especially for 400 x 400 m micro-AOIs.
   fitToAoi(aoiValue);
 
   const status = document.querySelector('#bathyStatus');
@@ -303,17 +305,19 @@ document.querySelector('#buildEnvRequest').addEventListener('click', () => {
       minDepth: Number(document.querySelector('#envMinDepth').value),
       maxDepth: Number(document.querySelector('#envMaxDepth').value),
       analysisGridM: Number(document.querySelector('#analysisGridM').value),
-      variables
+      variables,
+      bathymetrySelection: state.bathymetrySource
     });
     const copernicus = currentEnvRequest.source_jobs.filter(job => job.provider === 'Copernicus Marine').length;
     const publicOgc = currentEnvRequest.source_jobs.filter(job => job.execution === 'PUBLIC_OGC').length;
+    const directHr = currentEnvRequest.source_jobs.filter(job => job.execution === 'DIRECT_HR_DOWNLOAD').length;
     const discovery = currentEnvRequest.source_jobs.filter(job => job.execution === 'CAPABILITY_DISCOVERY_REQUIRED').length;
     const unresolved = currentEnvRequest.source_jobs.filter(job => job.spatial_adequacy?.status === 'UNRESOLVED').length;
     const coarse = currentEnvRequest.source_jobs.filter(job => job.spatial_adequacy?.status === 'COARSE').length;
-    status.textContent = `SOURCE-RESOLVED · ${variables.length} variables · ${currentEnvRequest.source_jobs.length} jobs · Copernicus ${copernicus} backend · public OGC ${publicOgc}${discovery ? ` · discovery ${discovery}` : ''}${unresolved || coarse ? ` · spatial: ${unresolved} unresolved / ${coarse} coarse` : ''}`;
+    status.textContent = `SOURCE-RESOLVED · ${variables.length} variables · ${currentEnvRequest.source_jobs.length} jobs · Copernicus ${copernicus} backend · HR bathy ${directHr}${publicOgc ? ` · public OGC ${publicOgc}` : ''}${discovery ? ` · discovery ${discovery}` : ''}${unresolved || coarse ? ` · spatial: ${unresolved} unresolved / ${coarse} coarse` : ''}`;
     status.className = unresolved ? 'status warn' : 'status good';
     setRequestButtons(true);
-    const bathyJob = currentEnvRequest.source_jobs.find(job => job.id === 'emodnet-bathymetry');
+    const bathyJob = currentEnvRequest.source_jobs.find(job => job.id === 'emodnet-bathymetry' || job.id === 'emodnet-hr-bathymetry');
     const bathyLink = document.querySelector('#openBathymetry');
     if (bathyJob) {
       bathyLink.href = bathyJob.request_url;
