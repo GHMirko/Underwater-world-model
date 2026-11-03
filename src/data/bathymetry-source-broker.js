@@ -406,6 +406,7 @@ export function summarizeBathymetryPlan(plan, limit = 6) {
     execution: item.execution,
     availability: item.availability,
     ready_for_use: item.ready_for_use,
+    metadata_url: item.metadata_url ?? null,
     resolution_m: item.typical_resolution_m,
     score: item.score
   }));
