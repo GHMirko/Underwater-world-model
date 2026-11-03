@@ -17,7 +17,7 @@ root.innerHTML = `
 <div class="app">
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
-    <span class="badge">GitHub v0.10 Micro-AOI</span>
+    <span class="badge">GitHub v0.11 Cartography Coherence</span>
     <span class="badge">MapLibre z22</span>
     <span class="badge">Resolution-aware Data Broker</span>
   </header>
@@ -29,20 +29,23 @@ root.innerHTML = `
     <aside class="sidebar">
       <div class="panel">
         <h2>Map</h2>
-        <div class="field"><label>Base map</label><select id="baseMap">
+        <div class="field"><label>Base map / land</label><select id="baseMap">
           <option value="chart">Chart</option><option value="satellite">Satellite</option><option value="terrain">Terrain</option><option value="minimal">Minimal</option>
         </select></div>
-        <div class="field"><label>Bathymetry</label><select id="bathyMode">
-          <option value="chart-relief">Chart Relief · dynamic</option>
-          <option value="emodnet-rainbow">EMODnet Rainbow</option><option value="emodnet-multicolour">EMODnet Multicolour</option><option value="emodnet-atlas">EMODnet Atlas</option><option value="gebco-relief">GEBCO Relief</option><option value="none">None</option>
+        <div class="field"><label>Bathymetry overlay · sea only</label><select id="bathyMode">
+          <option value="chart-relief">Chart Relief · sea-only</option>
+          <option value="emodnet-rainbow">EMODnet Rainbow · sea-only</option>
+          <option value="emodnet-multicolour">EMODnet Multicolour · sea-only</option>
+          <option value="none">None</option>
         </select></div>
         <div class="field"><label>Bathymetry opacity</label><input id="depthOpacity" type="range" min="0" max="100" value="72"></div>
-        <label><input id="contours" type="checkbox" checked> Adaptive isobaths</label>
-        <div class="field"><label>Isobath density</label><select id="contourDensity">
-          <option value="dense">Dense chart + EMODnet major</option>
-          <option value="major">EMODnet major only</option>
+        <label><input id="contours" type="checkbox" checked> Source-matched isobaths</label>
+        <div class="field"><label>Isobath detail</label><select id="contourDensity">
+          <option value="dense">Detailed where source supports it</option>
+          <option value="major">Major only where source supports it</option>
         </select></div>
         <div id="contourStatus" class="status">Waiting for map…</div>
+        <div class="data-note">Land is rendered only by the selected base map. Isobaths follow the selected bathymetry source family; different bathymetric models are not silently mixed.</div>
       </div>
 
       <div class="panel">
@@ -53,7 +56,7 @@ root.innerHTML = `
         </div>
         <button id="fitAoi" class="btn" style="width:100%;margin-top:6px" disabled>Fit AOI / micro-zoom</button>
         <div id="aoiStatus" class="status">No AOI selected.</div>
-        <div id="aoiScaleStatus" class="status">Viewer supports zoom to level 22. Analysis resolution remains source-dependent.</div>
+        <div id="aoiScaleStatus" class="status">Viewer supports zoom to level 22. AOI is auto-fitted after drawing; analysis resolution remains source-dependent.</div>
         <div id="bathyStatus" class="status">Bathymetry will be sampled automatically after AOI selection.</div>
         <div class="field"><label>Mission</label><select id="mission"><option>ASW</option><option>MCM</option><option>REA</option></select></div>
         <div class="field"><label>Max operating depth (m)</label><input id="maxDepth" type="number" value="500" min="0"></div>
@@ -101,6 +104,7 @@ const layers = new LayerManager(map);
 const contours = new AdaptiveContours(map, message => {
   document.querySelector('#contourStatus').textContent = message;
 });
+contours.setBathymetryMode(state.bathyMode);
 const legendEl = document.querySelector('#depthLegend');
 let currentEnvRequest = null;
 
@@ -110,6 +114,12 @@ function updateLegend() {
 
 function utcInputValue(date) {
   return date.toISOString().slice(0, 16);
+}
+
+function fitToAoi(aoiValue = state.aoi, duration = 450) {
+  if (!aoiValue) return;
+  const bounds = [[aoiValue.minLon, aoiValue.minLat], [aoiValue.maxLon, aoiValue.maxLat]];
+  map.fitBounds(bounds, { padding: 80, maxZoom: 21, duration });
 }
 
 const initialStart = new Date();
@@ -163,40 +173,45 @@ function renderSpatialAdequacy() {
   el.innerHTML = rows.join('') || 'Select at least one environmental variable.';
 }
 
-function updateAoiStatus(aoi) {
+function updateAoiStatus(aoiValue) {
   const el = document.querySelector('#aoiStatus');
   const scale = document.querySelector('#aoiScaleStatus');
   const fit = document.querySelector('#fitAoi');
-  fit.disabled = !aoi;
-  if (!aoi) {
+  fit.disabled = !aoiValue;
+  if (!aoiValue) {
     el.textContent = 'No AOI selected.';
     el.className = 'status';
-    scale.textContent = 'Viewer supports zoom to level 22. Analysis resolution remains source-dependent.';
+    scale.textContent = 'Viewer supports zoom to level 22. AOI is auto-fitted after drawing; analysis resolution remains source-dependent.';
     scale.className = 'status';
     renderSpatialAdequacy();
     return;
   }
-  const dimensions = aoiDimensionsMeters(aoi);
-  const zoom = recommendedZoomForAoi(aoi);
+  const dimensions = aoiDimensionsMeters(aoiValue);
+  const zoom = recommendedZoomForAoi(aoiValue);
   const micro = dimensions.maxDimension <= 1000;
-  el.textContent = `AOI ${aoi.minLat.toFixed(5)}…${aoi.maxLat.toFixed(5)} N · ${aoi.minLon.toFixed(5)}…${aoi.maxLon.toFixed(5)} E`;
+  el.textContent = `AOI ${aoiValue.minLat.toFixed(5)}…${aoiValue.maxLat.toFixed(5)} N · ${aoiValue.minLon.toFixed(5)}…${aoiValue.maxLon.toFixed(5)} E`;
   el.className = 'status good';
-  scale.textContent = `${micro ? 'MICRO-AOI · ' : ''}${formatMeters(dimensions.width)} × ${formatMeters(dimensions.height)} · ${(dimensions.area / 1e6).toFixed(dimensions.area < 1e6 ? 3 : 1)} km² · fit ~z${zoom.toFixed(1)}`;
+  scale.textContent = `${micro ? 'MICRO-AOI · ' : ''}${formatMeters(dimensions.width)} × ${formatMeters(dimensions.height)} · ${(dimensions.area / 1e6).toFixed(dimensions.area < 1e6 ? 3 : 1)} km² · auto-fit ~z${zoom.toFixed(1)}`;
   scale.className = micro ? 'status good' : 'status';
   renderSpatialAdequacy();
 }
 
-async function onAoiChanged(aoi) {
-  patchState({ aoi, bathymetry: null });
-  updateAoiStatus(aoi);
+async function onAoiChanged(aoiValue) {
+  patchState({ aoi: aoiValue, bathymetry: null });
+  updateAoiStatus(aoiValue);
   updateLegend();
-  invalidateEnvRequest(aoi ? 'AOI defined. Configure environmental request and build it.' : 'Select an AOI first.');
-  if (!aoi) return;
+  invalidateEnvRequest(aoiValue ? 'AOI defined. Configure environmental request and build it.' : 'Select an AOI first.');
+  if (!aoiValue) return;
+
+  // AOI is the operational focus. Fit it immediately after drawing instead of
+  // forcing the user to zoom manually, especially for 400 x 400 m micro-AOIs.
+  fitToAoi(aoiValue);
+
   const status = document.querySelector('#bathyStatus');
   status.textContent = 'Retrieving numeric EMODnet bathymetry…';
   status.className = 'status warn';
   try {
-    const bathymetry = await sampleAoiBathymetry(aoi);
+    const bathymetry = await sampleAoiBathymetry(aoiValue);
     patchState({ bathymetry });
     status.textContent = `REAL EMODnet · ${bathymetry.samples}/9 · mean ${bathymetry.mean.toFixed(1)} m · σ ${bathymetry.sd.toFixed(1)} m`;
     status.className = 'status good';
@@ -217,11 +232,7 @@ document.querySelector('#drawAoi').addEventListener('click', event => {
   document.querySelector('#aoiStatus').textContent = 'Drag on the map to define AOI.';
 });
 
-document.querySelector('#fitAoi').addEventListener('click', () => {
-  if (!state.aoi) return;
-  const bounds = [[state.aoi.minLon, state.aoi.minLat], [state.aoi.maxLon, state.aoi.maxLat]];
-  map.fitBounds(bounds, { padding: 80, maxZoom: 21, duration: 450 });
-});
+document.querySelector('#fitAoi').addEventListener('click', () => fitToAoi());
 
 document.querySelector('#clearAoi').addEventListener('click', () => {
   document.querySelector('#drawAoi').classList.remove('active');
@@ -238,6 +249,7 @@ map.on('mouseup', () => document.querySelector('#drawAoi').classList.remove('act
 
 map.on('load', () => {
   layers.restore();
+  contours.setBathymetryMode(state.bathyMode);
   contours.setDensity(state.contourDensity);
   contours.refresh();
 });
@@ -250,6 +262,7 @@ document.querySelector('#baseMap').addEventListener('change', event => {
 document.querySelector('#bathyMode').addEventListener('change', event => {
   patchState({ bathyMode: event.target.value });
   layers.setBathymetry(event.target.value);
+  contours.setBathymetryMode(event.target.value);
   updateLegend();
 });
 
@@ -359,4 +372,4 @@ document.querySelector('#optimize').addEventListener('click', () => {
 updateLegend();
 setRequestButtons(false);
 renderSpatialAdequacy();
-window.__MSO__ = { map, layers, contours, aoi, state, updateLegend, buildEnvironmentalRequest, aoiDimensionsMeters, resolutionAssessment };
+window.__MSO__ = { map, layers, contours, aoi, state, updateLegend, fitToAoi, buildEnvironmentalRequest, aoiDimensionsMeters, resolutionAssessment };
