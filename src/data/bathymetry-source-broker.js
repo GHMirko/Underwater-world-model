@@ -234,8 +234,8 @@ export const BATHYMETRY_SOURCE_CATALOG = Object.freeze([
     note: 'Reliable regional fallback and provenance backbone, but often too coarse for harbour/micro-AOI shallow-water geometry.'
   }),
   Object.freeze({
-    id: 'GEBCO_2025',
-    label: 'GEBCO 2025 global grid',
+    id: 'GEBCO_2026',
+    label: 'GEBCO 2026 global grid',
     provider: 'GEBCO / Seabed 2030',
     scope: 'GLOBAL',
     coverage: GLOBAL,
