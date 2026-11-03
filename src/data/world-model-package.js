@@ -3,7 +3,7 @@ function clean(value) {
 }
 
 function bathymetryLayer(state, environmentalRequest) {
-  const job = environmentalRequest?.source_jobs?.find(item => item.id === 'emodnet-bathymetry' || item.id === 'emodnet-hr-bathymetry') ?? null;
+  const job = environmentalRequest?.source_jobs?.find(item => ['emodnet-bathymetry', 'emodnet-hr-bathymetry', 'gebco-2026-bathymetry'].includes(item.id)) ?? null;
   const grid = state.bathymetryGrid;
   const quality = state.bathymetryQuality;
   const contours = state.adaptiveContours;
@@ -11,13 +11,15 @@ function bathymetryLayer(state, environmentalRequest) {
     id: 'bathymetry',
     layer_class: 'ENVIRONMENTAL_BASE_LAYER',
     analytical_source: {
-      provider: 'EMODnet Bathymetry',
-      source_id: grid?.source ?? job?.source_selector?.selected_source ?? 'EMODNET_STANDARD_DTM',
+      provider: job?.provider ?? 'EMODnet Bathymetry',
+      source_id: grid?.source ?? job?.source_selector?.selected_source ?? job?.product_id ?? 'EMODNET_STANDARD_DTM',
       service: job?.service ?? 'WCS',
       request_url: job?.request_url ?? null,
       native_horizontal_resolution_m: clean(quality?.native_resolution_m ?? job?.native_horizontal_resolution_m),
       source_format: job?.source_output?.format ?? 'geotiff',
-      vertical_semantics: { quantity: 'depth', units: 'm', positive: 'down' },
+      source_vertical_semantics: job?.source_vertical_semantics ?? { quantity: 'depth', units: 'm', positive: 'down' },
+      normalized_vertical_semantics: { quantity: 'depth', units: 'm', positive: 'down' },
+      normalization: job?.normalization ?? null,
       crs: 'EPSG:4326',
       provenance: job?.provenance ?? 'EMODnet numeric bathymetry',
       authoritative_for_predictors: true
