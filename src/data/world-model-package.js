@@ -119,6 +119,7 @@ export function buildWorldModelPackage({ state, environmentalRequest }) {
         ready_for_use: item.ready_for_use,
         access: item.access,
         licence: item.licence,
+        metadata_url: item.metadata_url ?? null,
         typical_resolution_m: item.typical_resolution_m,
         vertical_datum: item.vertical_datum,
         score: item.score,
