@@ -1,4 +1,5 @@
 import { state, subscribeState } from '../state.js';
+import { contourDisplayAssessment } from './contour-quality.js';
 
 function waitForApp() {
   return new Promise(resolve => {
@@ -16,7 +17,8 @@ function statusElement() {
 
 function localSummaryText(summary) {
   if (!summary?.feature_count) return null;
-  return `Adaptive isobaths · ${summary.interval_m} m interval · ${summary.levels_m.length} levels · confidence ${summary.confidence} · coverage ${(summary.coverage_ratio * 100).toFixed(0)}%`;
+  const quality = contourDisplayAssessment(summary);
+  return `Adaptive isobaths · ${summary.interval_m} m interval · ${summary.levels_m.length} levels · confidence ${summary.confidence} · coverage ${(summary.coverage_ratio * 100).toFixed(0)}% · ${quality.ready ? 'LOCAL ACCEPTED' : 'LOCAL INSUFFICIENT'}`;
 }
 
 const app = await waitForApp();
@@ -30,7 +32,7 @@ contourEngine.onStatus = message => {
     return;
   }
   const phase = state.aoi
-    ? 'local derived contour unavailable'
+    ? 'local derived contour unavailable or below quality gate'
     : 'waiting for local AOI bathymetry';
   originalStatus(`CONTEXT ONLY · ${phase} · ${message}`);
 };
@@ -50,7 +52,8 @@ function applyContourSourcePolicy() {
   }
 
   const summary = state.adaptiveContours;
-  const localReady = Boolean(summary?.feature_count > 0);
+  const assessment = contourDisplayAssessment(summary);
+  const localReady = Boolean(summary?.feature_count > 0 && assessment.ready);
 
   if (localReady) {
     contextFallback = false;
@@ -63,10 +66,9 @@ function applyContourSourcePolicy() {
     return;
   }
 
-  // Best-available-information policy: before a numeric AOI exists, or when
-  // the local grid cannot yet produce a trustworthy crossing, keep the
-  // authoritative EMODnet contour service visible as context. It is never
-  // promoted to the local analytical World Model layer.
+  // Best-available-information policy: context remains authoritative until the
+  // local numeric contour layer has enough spatial support to be operationally
+  // readable. Sparse fragments are not promoted merely because feature_count > 0.
   contextFallback = true;
   contourEngine.setBathymetryMode('emodnet-rainbow');
   contourEngine.setDensity(state.contourDensity);
@@ -75,7 +77,9 @@ function applyContourSourcePolicy() {
   const status = statusElement();
   if (status) {
     const reason = state.aoi
-      ? `local numeric grid produced no contour crossing${summary?.confidence ? ` · local confidence ${summary.confidence}` : ''}`
+      ? summary?.feature_count
+        ? `local evidence insufficient · ${assessment.reason}`
+        : `local numeric grid produced no contour crossing${summary?.confidence ? ` · local confidence ${summary.confidence}` : ''}`
       : 'waiting for local AOI bathymetry';
     status.textContent = `CONTEXT ONLY · EMODnet isobaths · ${reason}`;
     status.className = 'status warn';
@@ -91,14 +95,11 @@ subscribeState((next, patch) => {
     Object.prototype.hasOwnProperty.call(patch, 'contourDensity') ||
     Object.prototype.hasOwnProperty.call(patch, 'baseMap')
   ) {
-    // Run after the primary cartography controller has reacted to the same
-    // state patch. This controller only arbitrates which contour source is
-    // visible; it does not own the World Model data.
     setTimeout(applyContourSourcePolicy, 0);
   }
 });
 
 const badge = document.querySelector('.header .badge');
-if (badge) badge.textContent = 'GitHub v0.16 Confidence-Aware Contours · v0.16.1';
+if (badge) badge.textContent = 'GitHub v0.16.2 Contour Quality Gate';
 
 applyContourSourcePolicy();
