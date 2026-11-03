@@ -12,7 +12,7 @@ import { buildWorldModelPackage } from './data/world-model-package.js';
 import { buildBathymetryDiscoveryPlan, summarizeBathymetryPlan } from './data/bathymetry-source-broker.js';
 import { downloadJson, downloadText } from './data/download.js';
 import { ASSETS, DEFAULT_WEIGHTS, optimize } from './optimizer/core.js';
-import { state, patchState } from './state.js';
+import { state, patchState, subscribeState } from './state.js';
 
 const root = document.querySelector('#app');
 root.innerHTML = `
@@ -192,14 +192,26 @@ function renderBathymetryBroker() {
     estimatedMinDepthM: Number.isFinite(state.bathymetry?.min) ? state.bathymetry.min : null,
     estimatedMaxDepthM: Number.isFinite(state.bathymetry?.max) ? state.bathymetry.max : null
   });
+  if (state.bathymetrySource) {
+    plan.runtime_discovery = {
+      status: state.bathymetrySource.status ?? null,
+      selected_source: state.bathymetrySource.selected_source ?? null,
+      native_horizontal_resolution_m: state.bathymetrySource.native_horizontal_resolution_m ?? null,
+      reason: state.bathymetrySource.reason ?? null
+    };
+    if (state.bathymetrySource.status === 'HR_SELECTED') {
+      plan.recommended_strategy.current_executable_baseline = 'EMODNET_HR_DTM';
+    }
+  }
   patchState({ bathymetryDiscoveryPlan: plan });
   const summary = summarizeBathymetryPlan(plan, 7);
-  const topPrimary = plan.recommended_strategy.primary_numeric_candidates[0] ?? 'NONE';
-  status.textContent = `BEST AVAILABLE PLAN · primary ${topPrimary} · ${plan.candidates.length} applicable/discovery candidates · ${plan.area_profile.micro_aoi ? 'micro-AOI' : 'regional AOI'}`;
+  const potential = plan.recommended_strategy.best_potential_source ?? 'NONE';
+  const baseline = plan.recommended_strategy.current_executable_baseline ?? 'NONE';
+  status.textContent = `BEST AVAILABLE PLAN · baseline ${baseline} · best potential ${potential} · ${plan.candidates.length} candidates · ${plan.area_profile.micro_aoi ? 'micro-AOI' : 'regional AOI'}`;
   status.className = 'status good';
   list.innerHTML = summary.map((item, index) => {
     const res = Number.isFinite(item.resolution_m) ? `~${formatMeters(item.resolution_m)}` : 'metadata/variable';
-    return `<div class="source-candidate ${item.use_class.toLowerCase()}"><b>${index + 1}. ${item.label}</b><span>${item.use_class} · ${item.applicability} · ${item.execution} · ${res}</span></div>`;
+    return `<div class="source-candidate ${item.use_class.toLowerCase()}"><b>${index + 1}. ${item.label}</b><span>${item.use_class} · ${item.availability} · ${item.applicability} · ${res}</span></div>`;
   }).join('');
   button.disabled = false;
 }
@@ -438,4 +450,7 @@ updateLegend();
 setRequestButtons(false);
 renderSpatialAdequacy();
 renderBathymetryBroker();
+subscribeState((next, patch) => {
+  if (Object.prototype.hasOwnProperty.call(patch, 'bathymetrySource') && next.aoi) renderBathymetryBroker();
+});
 window.__MSO__ = { map, layers, contours, aoi, state, updateLegend, fitToAoi, buildEnvironmentalRequest, buildWorldModelPackage, aoiDimensionsMeters, resolutionAssessment };
