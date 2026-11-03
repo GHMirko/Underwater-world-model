@@ -104,6 +104,7 @@ export function buildWorldModelPackage({ state, environmentalRequest }) {
       area_profile: state.bathymetryDiscoveryPlan.area_profile,
       policy: state.bathymetryDiscoveryPlan.policy,
       recommended_strategy: state.bathymetryDiscoveryPlan.recommended_strategy,
+      runtime_discovery: state.bathymetryDiscoveryPlan.runtime_discovery ?? null,
       candidates: state.bathymetryDiscoveryPlan.candidates?.map(item => ({
         id: item.id,
         label: item.label,
@@ -112,6 +113,8 @@ export function buildWorldModelPackage({ state, environmentalRequest }) {
         source_class: item.source_class,
         applicability: item.applicability,
         execution: item.execution,
+        availability: item.availability,
+        ready_for_use: item.ready_for_use,
         access: item.access,
         licence: item.licence,
         typical_resolution_m: item.typical_resolution_m,
