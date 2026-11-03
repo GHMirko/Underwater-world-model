@@ -23,6 +23,7 @@ export const BATHYMETRY_SOURCE_CATALOG = Object.freeze([
   }),
   Object.freeze({
     id: 'EMODNET_HR_DTM',
+    metadata_url: 'https://emodnet.ec.europa.eu/en/bathymetry',
     label: 'EMODnet High-Resolution DTM',
     provider: 'EMODnet Bathymetry',
     scope: 'EUROPE',
@@ -43,6 +44,7 @@ export const BATHYMETRY_SOURCE_CATALOG = Object.freeze([
   }),
   Object.freeze({
     id: 'EMODNET_SOURCE_SURVEY',
+    metadata_url: 'https://emodnet.ec.europa.eu/en/bathymetry',
     label: 'EMODnet source-reference survey / composite DTM',
     provider: 'EMODnet / SeaDataNet CDI / Sextant',
     scope: 'EUROPE',
@@ -81,6 +83,7 @@ export const BATHYMETRY_SOURCE_CATALOG = Object.freeze([
   }),
   Object.freeze({
     id: 'SHOM_LITTO3D',
+    metadata_url: 'https://data.shom.fr/',
     label: 'SHOM/IGN Litto3D',
     provider: 'Shom / IGN',
     scope: 'FRANCE',
@@ -101,6 +104,7 @@ export const BATHYMETRY_SOURCE_CATALOG = Object.freeze([
   }),
   Object.freeze({
     id: 'RIJKSWATERSTAAT_BATHY_1M',
+    metadata_url: 'https://www.rijkswaterstaatdata.nl/',
     label: 'Rijkswaterstaat 1 m bathymetry',
     provider: 'Rijkswaterstaat',
     scope: 'NETHERLANDS',
@@ -120,6 +124,7 @@ export const BATHYMETRY_SOURCE_CATALOG = Object.freeze([
   }),
   Object.freeze({
     id: 'UKHO_MARINE_BATHYMETRY',
+    metadata_url: 'https://www.admiralty.co.uk/access-data/marine-data',
     label: 'UKHO ADMIRALTY Marine Data Portal bathymetry',
     provider: 'UK Hydrographic Office',
     scope: 'UK_EEZ',
@@ -139,6 +144,7 @@ export const BATHYMETRY_SOURCE_CATALOG = Object.freeze([
   }),
   Object.freeze({
     id: 'LIGURIA_PTAMC_BATHY',
+    metadata_url: 'https://dati.regione.liguria.it/dataset/ds-261',
     label: 'Liguria PTAMC multibeam bathymetry',
     provider: 'Regione Liguria',
     scope: 'LIGURIA_SELECTED_AREAS',
@@ -158,6 +164,7 @@ export const BATHYMETRY_SOURCE_CATALOG = Object.freeze([
   }),
   Object.freeze({
     id: 'ENC_S57_S101',
+    metadata_url: 'https://iho.int/en/encs',
     label: 'Official ENC S-57 / S-101',
     provider: 'National Hydrographic Office / licensed distributor',
     scope: 'GLOBAL',
@@ -177,6 +184,7 @@ export const BATHYMETRY_SOURCE_CATALOG = Object.freeze([
   }),
   Object.freeze({
     id: 'SENTINEL2_SDB',
+    metadata_url: 'https://dataspace.copernicus.eu/',
     label: 'Satellite-Derived Bathymetry from optical imagery',
     provider: 'Copernicus Sentinel-2 / derived processor',
     scope: 'GLOBAL_COASTAL',
@@ -197,6 +205,7 @@ export const BATHYMETRY_SOURCE_CATALOG = Object.freeze([
   }),
   Object.freeze({
     id: 'IHO_DCDB_CSB',
+    metadata_url: 'https://www.ngdc.noaa.gov/mgg/bathymetry/iho.html',
     label: 'IHO DCDB / Crowdsourced Bathymetry',
     provider: 'IHO DCDB / NOAA NCEI',
     scope: 'GLOBAL',
@@ -216,6 +225,7 @@ export const BATHYMETRY_SOURCE_CATALOG = Object.freeze([
   }),
   Object.freeze({
     id: 'EMODNET_STANDARD_DTM',
+    metadata_url: 'https://emodnet.ec.europa.eu/en/bathymetry',
     label: 'EMODnet harmonised DTM 2024',
     provider: 'EMODnet Bathymetry',
     scope: 'EUROPE',
@@ -235,6 +245,7 @@ export const BATHYMETRY_SOURCE_CATALOG = Object.freeze([
   }),
   Object.freeze({
     id: 'GEBCO_2026',
+    metadata_url: 'https://www.gebco.net/data-products/gridded-bathymetry-data/gebco2026-grid',
     label: 'GEBCO 2026 global grid',
     provider: 'GEBCO / Seabed 2030',
     scope: 'GLOBAL',
