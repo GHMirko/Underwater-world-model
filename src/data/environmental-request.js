@@ -89,7 +89,7 @@ function sanitizeHrPrimary(primary) {
   };
 }
 
-function buildBathymetryJob(definition, request, selection = null) {
+function buildBathymetryJob(definition, request, selection = null, discoveryPlan = null) {
   const fallbackGrid = estimateBathymetryCells(request.aoi);
   const fallbackUrl = buildEmodnetBathymetryUrl(request.aoi);
   const useHr = selection?.selected_source === 'EMODNET_HR_DTM' && selection?.primary?.download_url;
@@ -101,6 +101,22 @@ function buildBathymetryJob(definition, request, selection = null) {
   return {
     id: useHr ? 'emodnet-hr-bathymetry' : 'emodnet-bathymetry',
     provider: definition.provider,
+    source_broker_plan: discoveryPlan ? {
+      schema: discoveryPlan.schema,
+      recommended_strategy: discoveryPlan.recommended_strategy,
+      candidates: discoveryPlan.candidates?.map(item => ({
+        id: item.id,
+        label: item.label,
+        use_class: item.use_class,
+        applicability: item.applicability,
+        execution: item.execution,
+        typical_resolution_m: item.typical_resolution_m,
+        vertical_datum: item.vertical_datum,
+        access: item.access,
+        licence: item.licence,
+        score: item.score
+      })) ?? []
+    } : null,
     source_selector: {
       status: selection?.status ?? 'NOT_RUN',
       selected_source: useHr ? 'EMODNET_HR_DTM' : 'EMODNET_STANDARD_DTM',
@@ -155,7 +171,8 @@ export function buildEnvironmentalRequest({
   maxDepth = 500,
   analysisGridM = 25,
   variables = [],
-  bathymetrySelection = null
+  bathymetrySelection = null,
+  bathymetryDiscoveryPlan = null
 }) {
   aoiToPolygon(aoi);
   assertFinite(Number(minDepth), 'minDepth');
@@ -195,7 +212,7 @@ export function buildEnvironmentalRequest({
   for (const id of selected) {
     const definition = ENVIRONMENT_VARIABLES[id];
     if (definition.provider === 'Copernicus Marine') request.source_jobs.push(buildCopernicusJob(definition, request));
-    else if (id === 'bathymetry') request.source_jobs.push(buildBathymetryJob(definition, request, bathymetrySelection));
+    else if (id === 'bathymetry') request.source_jobs.push(buildBathymetryJob(definition, request, bathymetrySelection, bathymetryDiscoveryPlan));
     else if (id === 'seabed_substrate') request.source_jobs.push(buildSubstrateJob(definition, request));
   }
 
