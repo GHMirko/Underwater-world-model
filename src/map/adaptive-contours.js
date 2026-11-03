@@ -1,5 +1,5 @@
 import { maplibregl } from './map-core.js';
-import { SEASCAPE_VECTOR, emodnetWms } from './config.js';
+import { SEASCAPE_VECTOR, contourFamilyForBathymetry, emodnetWms } from './config.js';
 import { contourThreshold, filterContours } from './contour-model.js';
 
 const SOURCE = 'adaptive-contours-source';
@@ -24,6 +24,8 @@ export class AdaptiveContours {
     this.onStatus = onStatus;
     this.visible = true;
     this.density = 'dense';
+    this.bathymetryMode = 'chart-relief';
+    this.family = contourFamilyForBathymetry(this.bathymetryMode);
     this.raw = null;
     this.abortController = null;
     this.markers = [];
@@ -31,6 +33,15 @@ export class AdaptiveContours {
     this._refresh = this.refresh.bind(this);
     map.on('moveend', this._refresh);
     map.on('style.load', this._refresh);
+  }
+
+  setBathymetryMode(mode) {
+    this.bathymetryMode = mode;
+    this.family = contourFamilyForBathymetry(mode);
+    this.raw = null;
+    this.abortController?.abort();
+    this._removeAll();
+    if (this.visible) this.refresh();
   }
 
   setVisible(visible) {
@@ -46,26 +57,43 @@ export class AdaptiveContours {
 
   setDensity(density) {
     this.density = density === 'major' ? 'major' : 'dense';
-    if (!this.visible) return;
-    if (this.density === 'major') this._removeDense();
-    this.refresh();
+    if (this.visible) this.refresh();
   }
 
   async refresh() {
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => this._refreshNow(), 200);
+    this.timer = setTimeout(() => this._refreshNow(), 180);
   }
 
   async _refreshNow() {
     if (!this.visible || !this.map.isStyleLoaded()) return;
-    this._renderDense();
 
+    if (this.family === 'none') {
+      this._removeAll();
+      this.onStatus('No bathymetry selected · isobaths hidden');
+      return;
+    }
+
+    // Source-matched rule: Seascape bathymetry uses Seascape contours only.
+    // Do not add EMODnet major lines on top because different bathymetric
+    // models legitimately produce non-coincident contours.
+    if (this.family === 'seascape') {
+      this.abortController?.abort();
+      this._clearVector();
+      this._removeFallback();
+      this._renderDense();
+      this.onStatus(this.density === 'major'
+        ? 'Source-matched Seascape isobaths · provider has one vector contour family'
+        : 'Source-matched Seascape isobaths · detailed vector contours');
+      return;
+    }
+
+    // EMODnet bathymetry uses EMODnet contours only.
+    this._removeDense();
     const zoom = this.map.getZoom();
     if (zoom < 5) {
       this._renderFallback();
-      this.onStatus(this.density === 'dense'
-        ? 'Dense chart isobaths active · low zoom EMODnet overview'
-        : 'Low zoom: EMODnet WMS isobath overview');
+      this.onStatus('Source-matched EMODnet isobaths · low-zoom WMS overview');
       return;
     }
 
@@ -78,10 +106,7 @@ export class AdaptiveContours {
       `https://ows.emodnet-bathymetry.eu/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=emodnet:contours&outputFormat=application/json&srsName=EPSG:4326&count=5000&bbox=${bbox},EPSG:4326`
     ];
 
-    this.onStatus(this.density === 'dense'
-      ? 'Dense chart isobaths active · loading EMODnet major labels…'
-      : 'Loading adaptive EMODnet isobaths…');
-
+    this.onStatus('Loading source-matched EMODnet isobaths…');
     for (const url of urls) {
       try {
         const response = await fetch(url, { signal: this.abortController.signal, headers: { Accept: 'application/json' } });
@@ -95,16 +120,11 @@ export class AdaptiveContours {
     }
 
     this._renderFallback();
-    this.onStatus(this.density === 'dense'
-      ? 'Dense chart isobaths active · EMODnet major WMS fallback'
-      : 'WFS unavailable; WMS fallback active');
+    this.onStatus('Source-matched EMODnet isobaths · WFS unavailable, WMS fallback active');
   }
 
   _renderDense() {
-    if (this.density !== 'dense' || !this.map.isStyleLoaded()) {
-      this._removeDense();
-      return;
-    }
+    if (!this.map.isStyleLoaded()) return;
     if (this.map.getSource(DENSE_SOURCE)) return;
     this.map.addSource(DENSE_SOURCE, {
       type: 'vector',
@@ -120,8 +140,8 @@ export class AdaptiveContours {
       layout: { 'line-join': 'round', 'line-cap': 'round' },
       paint: {
         'line-color': '#315c75',
-        'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0.45, 8, 0.6, 11, 0.85, 14, 1.05],
-        'line-opacity': 0.72
+        'line-width': ['interpolate', ['linear'], ['zoom'], 4, 0.45, 8, 0.6, 11, 0.85, 14, 1.05, 18, 1.2],
+        'line-opacity': 0.78
       }
     });
   }
@@ -138,14 +158,13 @@ export class AdaptiveContours {
         source: SOURCE,
         paint: {
           'line-color': '#f5fbff',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.9, 10, 1.6, 13, 2.1],
+          'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.9, 10, 1.6, 13, 2.1, 18, 2.4],
           'line-opacity': 0.95
         }
       });
     }
     this._renderLabels(filtered);
-    const prefix = this.density === 'dense' ? 'Dense chart + EMODnet major' : 'EMODnet major';
-    this.onStatus(`${prefix}: ${filtered.features.length} major features · ${this.markers.length} labels · ≥ ${contourThreshold(this.map.getZoom())} m`);
+    this.onStatus(`Source-matched EMODnet: ${filtered.features.length} features · ${this.markers.length} labels · ≥ ${contourThreshold(this.map.getZoom())} m`);
   }
 
   _renderLabels(filtered) {
