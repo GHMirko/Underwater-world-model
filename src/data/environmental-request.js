@@ -1,9 +1,14 @@
 import { ENVIRONMENT_PACKAGE_PLAN, ENVIRONMENT_VARIABLES } from './source-registry.js';
+import { aoiDimensionsMeters, expandAoiByMeters, resolutionAssessment } from '../map/spatial-scale.js';
 
 const BATHY_RES_DEG = 1 / 960; // EMODnet DTM 1/16 arc minute
 
 function assertFinite(value, label) {
   if (!Number.isFinite(value)) throw new Error(`${label} must be finite`);
+}
+
+function bboxFromAoi(aoi) {
+  return [aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat];
 }
 
 export function aoiToPolygon(aoi) {
@@ -55,14 +60,21 @@ export function estimateBathymetryCells(aoi, resolution = BATHY_RES_DEG) {
 }
 
 function buildCopernicusJob(definition, request) {
+  const adequacy = resolutionAssessment(request.aoi, definition.nativeHorizontalResolutionM);
+  const contextBufferM = adequacy.status === 'ADEQUATE' ? 0 : definition.nativeHorizontalResolutionM * 1.25;
+  const sourceAoi = contextBufferM > 0 ? expandAoiByMeters(request.aoi, contextBufferM) : request.aoi;
   return {
     id: `copernicus-${definition.id}`,
     provider: definition.provider,
     product_id: definition.productId,
     dataset_id: definition.datasetId,
     variables: [...definition.variables],
+    native_horizontal_resolution_m: definition.nativeHorizontalResolutionM,
+    spatial_adequacy: adequacy,
+    context_buffer_m: contextBufferM,
     subset: {
-      bbox: [...request.bbox],
+      bbox: bboxFromAoi(sourceAoi),
+      target_aoi_bbox: [...request.bbox],
       start_datetime: request.time.start,
       end_datetime: request.time.end,
       minimum_depth: request.depth_m.min,
@@ -74,12 +86,14 @@ function buildCopernicusJob(definition, request) {
       canonical_target: ENVIRONMENT_PACKAGE_PLAN.gridded
     },
     execution: 'BACKEND_REQUIRED',
-    provenance: 'Copernicus Marine official 3D hourly Mediterranean analysis/forecast dataset'
+    provenance: 'Copernicus Marine official 3D hourly Mediterranean analysis/forecast dataset',
+    resolution_note: definition.resolutionNote
   };
 }
 
 function buildBathymetryJob(definition, request) {
   const grid = estimateBathymetryCells(request.aoi);
+  const adequacy = resolutionAssessment(request.aoi, definition.nativeHorizontalResolutionM);
   return {
     id: 'emodnet-bathymetry',
     provider: definition.provider,
@@ -87,10 +101,13 @@ function buildBathymetryJob(definition, request) {
     coverage: definition.coverage,
     request_url: buildEmodnetBathymetryUrl(request.aoi),
     subset: { bbox: [...request.bbox] },
+    native_horizontal_resolution_m: definition.nativeHorizontalResolutionM,
+    spatial_adequacy: adequacy,
     source_output: { format: 'geotiff', resolution_deg: BATHY_RES_DEG, estimated_grid: grid },
     normalization_target: { format: 'netcdf', file: ENVIRONMENT_PACKAGE_PLAN.gridded, variable: 'bathymetry' },
     execution: 'PUBLIC_OGC',
-    provenance: 'EMODnet harmonised DTM; numeric coverage, separate from visual bathymetry layer'
+    provenance: 'EMODnet harmonised DTM; numeric coverage, separate from visual bathymetry layer',
+    resolution_note: definition.resolutionNote
   };
 }
 
@@ -103,9 +120,12 @@ function buildSubstrateJob(definition, request) {
     capabilities_url: definition.capabilitiesUrl,
     feature_type: null,
     subset: { bbox: [...request.bbox], geometry: 'AOI polygon preferred' },
+    native_horizontal_resolution_m: null,
+    spatial_adequacy: { status: 'UNKNOWN', cellsAcrossMin: null, cellsAcrossMax: null },
     output: { format: 'geojson', canonical_target: ENVIRONMENT_PACKAGE_PLAN.seabedVector },
     execution: 'CAPABILITY_DISCOVERY_REQUIRED',
-    provenance: 'EMODnet Geology seabed substrate WFS; feature type must be discovered from current capabilities before extraction'
+    provenance: 'EMODnet Geology seabed substrate WFS; feature type must be discovered from current capabilities before extraction',
+    resolution_note: definition.resolutionNote
   };
 }
 
@@ -115,12 +135,15 @@ export function buildEnvironmentalRequest({
   endDatetime,
   minDepth = 0,
   maxDepth = 500,
+  analysisGridM = 25,
   variables = []
 }) {
   aoiToPolygon(aoi);
   assertFinite(Number(minDepth), 'minDepth');
   assertFinite(Number(maxDepth), 'maxDepth');
+  assertFinite(Number(analysisGridM), 'analysisGridM');
   if (Number(minDepth) < 0 || Number(maxDepth) <= Number(minDepth)) throw new Error('Depth range is invalid');
+  if (Number(analysisGridM) <= 0) throw new Error('Analysis grid must be positive');
   const start = normalizeUtc(startDatetime, 'startDatetime');
   const end = normalizeUtc(endDatetime, 'endDatetime');
   if (new Date(end) <= new Date(start)) throw new Error('End time must be after start time');
@@ -128,13 +151,21 @@ export function buildEnvironmentalRequest({
   const selected = [...new Set(variables)].filter(id => ENVIRONMENT_VARIABLES[id]);
   if (!selected.length) throw new Error('Select at least one environmental variable');
 
+  const dimensions = aoiDimensionsMeters(aoi);
   const request = {
-    schema: 'environmental-data-request/0.1',
+    schema: 'environmental-data-request/0.2',
     created_at: new Date().toISOString(),
     region_profile: 'MEDITERRANEAN',
     aoi: { ...aoi },
     geometry: aoiToPolygon(aoi),
-    bbox: [aoi.minLon, aoi.minLat, aoi.maxLon, aoi.maxLat],
+    bbox: bboxFromAoi(aoi),
+    spatial_profile: {
+      width_m: dimensions.width,
+      height_m: dimensions.height,
+      area_m2: dimensions.area,
+      target_analysis_grid_m: Number(analysisGridM),
+      note: 'Target analysis grid is a computational/resampling grid; it does not increase native source information.'
+    },
     time: { start, end },
     depth_m: { min: Number(minDepth), max: Number(maxDepth) },
     requested_variables: selected,
@@ -175,14 +206,15 @@ export function buildCopernicusPython(request) {
     '',
     '# Generated by Underwater Mission Optimizer Data Broker.',
     '# Credentials are handled by the Copernicus Marine Toolbox environment, never embedded here.',
+    '# Coarse source grids may be fetched with context around the AOI; downstream processing clips/interpolates to the target AOI.',
     ''
   ];
   for (const job of jobs) {
     lines.push('copernicusmarine.subset(');
     lines.push(`    dataset_id=${JSON.stringify(job.dataset_id)},`);
     lines.push(`    variables=${JSON.stringify(job.variables)},`);
-    lines.push(`    minimum_longitude=${request.bbox[0]}, maximum_longitude=${request.bbox[2]},`);
-    lines.push(`    minimum_latitude=${request.bbox[1]}, maximum_latitude=${request.bbox[3]},`);
+    lines.push(`    minimum_longitude=${job.subset.bbox[0]}, maximum_longitude=${job.subset.bbox[2]},`);
+    lines.push(`    minimum_latitude=${job.subset.bbox[1]}, maximum_latitude=${job.subset.bbox[3]},`);
     lines.push(`    start_datetime=${JSON.stringify(request.time.start)}, end_datetime=${JSON.stringify(request.time.end)},`);
     lines.push(`    minimum_depth=${request.depth_m.min}, maximum_depth=${request.depth_m.max},`);
     lines.push(`    output_filename=${JSON.stringify(`${job.id}.nc`)},`);

@@ -4,6 +4,7 @@ import { LayerManager } from './map/layer-manager.js';
 import { AoiController } from './map/aoi-controller.js';
 import { AdaptiveContours } from './map/adaptive-contours.js';
 import { renderDepthLegend } from './map/depth-legend.js';
+import { aoiDimensionsMeters, formatMeters, recommendedZoomForAoi, resolutionAssessment } from './map/spatial-scale.js';
 import { sampleAoiBathymetry } from './data/emodnet.js';
 import { DEFAULT_ENVIRONMENT_SELECTION, ENVIRONMENT_VARIABLES } from './data/source-registry.js';
 import { buildCopernicusPython, buildEnvironmentalRequest } from './data/environmental-request.js';
@@ -16,9 +17,9 @@ root.innerHTML = `
 <div class="app">
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
-    <span class="badge">GitHub v0.9 Data Broker</span>
-    <span class="badge">MapLibre bundled</span>
-    <span class="badge">Regression-safe modules</span>
+    <span class="badge">GitHub v0.10 Micro-AOI</span>
+    <span class="badge">MapLibre z22</span>
+    <span class="badge">Resolution-aware Data Broker</span>
   </header>
   <div class="workspace">
     <section class="map-wrap">
@@ -50,7 +51,9 @@ root.innerHTML = `
           <button id="drawAoi" class="btn primary">Draw AOI</button>
           <button id="clearAoi" class="btn">Clear AOI</button>
         </div>
+        <button id="fitAoi" class="btn" style="width:100%;margin-top:6px" disabled>Fit AOI / micro-zoom</button>
         <div id="aoiStatus" class="status">No AOI selected.</div>
+        <div id="aoiScaleStatus" class="status">Viewer supports zoom to level 22. Analysis resolution remains source-dependent.</div>
         <div id="bathyStatus" class="status">Bathymetry will be sampled automatically after AOI selection.</div>
         <div class="field"><label>Mission</label><select id="mission"><option>ASW</option><option>MCM</option><option>REA</option></select></div>
         <div class="field"><label>Max operating depth (m)</label><input id="maxDepth" type="number" value="500" min="0"></div>
@@ -66,7 +69,9 @@ root.innerHTML = `
           <div class="field"><label>Min depth (m)</label><input id="envMinDepth" type="number" min="0" value="0"></div>
           <div class="field"><label>Max depth (m)</label><input id="envMaxDepth" type="number" min="1" value="500"></div>
         </div>
+        <div class="field"><label>Target analysis grid (m)</label><input id="analysisGridM" type="number" min="1" value="25"><small class="field-note">Computational grid only. It never upgrades native source resolution.</small></div>
         <div class="field"><label>Extract for AOI</label><div id="envVariables" class="env-vars"></div></div>
+        <div id="spatialAdequacy" class="spatial-adequacy">Define an AOI to assess source resolution.</div>
         <button id="buildEnvRequest" class="btn primary" style="width:100%">Build Environmental Data Request</button>
         <div id="envRequestStatus" class="status">Select an AOI, time/depth window and variables.</div>
         <div class="request-actions">
@@ -75,7 +80,7 @@ root.innerHTML = `
           <button id="downloadCopernicus" class="btn" disabled>Copernicus job</button>
           <a id="openBathymetry" class="btn btn-link disabled-link" target="_blank" rel="noreferrer">EMODnet bathy</a>
         </div>
-        <div class="data-note">REAL gate remains OPEN until source jobs are executed and validated. Copernicus credentials are never stored in the browser.</div>
+        <div class="data-note">REAL gate remains OPEN until source jobs are executed and validated. Coarse sources are context-sampled around micro-AOIs; resampling does not create new environmental information.</div>
       </div>
 
       <div class="panel">
@@ -115,7 +120,8 @@ document.querySelector('#envEnd').value = utcInputValue(initialEnd);
 
 document.querySelector('#envVariables').innerHTML = DEFAULT_ENVIRONMENT_SELECTION.map(id => {
   const variable = ENVIRONMENT_VARIABLES[id];
-  return `<label><input type="checkbox" value="${id}" checked> <span><b>${variable.label}</b><small>${variable.provider}</small></span></label>`;
+  const resolution = Number.isFinite(variable.nativeHorizontalResolutionM) ? ` · ~${formatMeters(variable.nativeHorizontalResolutionM)}` : '';
+  return `<label><input type="checkbox" value="${id}" checked> <span><b>${variable.label}</b><small>${variable.provider}${resolution}</small></span></label>`;
 }).join('');
 
 function setRequestButtons(enabled) {
@@ -137,15 +143,47 @@ function invalidateEnvRequest(message = 'AOI or request parameters changed. Buil
   status.className = 'status';
 }
 
+function selectedEnvironmentVariables() {
+  return [...document.querySelectorAll('#envVariables input:checked')].map(input => input.value);
+}
+
+function renderSpatialAdequacy() {
+  const el = document.querySelector('#spatialAdequacy');
+  if (!state.aoi) {
+    el.innerHTML = 'Define an AOI to assess source resolution.';
+    return;
+  }
+  const rows = selectedEnvironmentVariables().map(id => {
+    const variable = ENVIRONMENT_VARIABLES[id];
+    const assessment = resolutionAssessment(state.aoi, variable.nativeHorizontalResolutionM);
+    const resolution = Number.isFinite(variable.nativeHorizontalResolutionM) ? formatMeters(variable.nativeHorizontalResolutionM) : 'variable / metadata required';
+    const cells = assessment.cellsAcrossMin == null ? '' : ` · ${assessment.cellsAcrossMin.toFixed(1)} cells across short side`;
+    return `<div class="adequacy-row ${assessment.status.toLowerCase()}"><b>${variable.label}</b><span>${assessment.status} · native ${resolution}${cells}</span></div>`;
+  });
+  el.innerHTML = rows.join('') || 'Select at least one environmental variable.';
+}
+
 function updateAoiStatus(aoi) {
   const el = document.querySelector('#aoiStatus');
+  const scale = document.querySelector('#aoiScaleStatus');
+  const fit = document.querySelector('#fitAoi');
+  fit.disabled = !aoi;
   if (!aoi) {
     el.textContent = 'No AOI selected.';
     el.className = 'status';
+    scale.textContent = 'Viewer supports zoom to level 22. Analysis resolution remains source-dependent.';
+    scale.className = 'status';
+    renderSpatialAdequacy();
     return;
   }
-  el.textContent = `AOI ${aoi.minLat.toFixed(3)}…${aoi.maxLat.toFixed(3)} N · ${aoi.minLon.toFixed(3)}…${aoi.maxLon.toFixed(3)} E`;
+  const dimensions = aoiDimensionsMeters(aoi);
+  const zoom = recommendedZoomForAoi(aoi);
+  const micro = dimensions.maxDimension <= 1000;
+  el.textContent = `AOI ${aoi.minLat.toFixed(5)}…${aoi.maxLat.toFixed(5)} N · ${aoi.minLon.toFixed(5)}…${aoi.maxLon.toFixed(5)} E`;
   el.className = 'status good';
+  scale.textContent = `${micro ? 'MICRO-AOI · ' : ''}${formatMeters(dimensions.width)} × ${formatMeters(dimensions.height)} · ${(dimensions.area / 1e6).toFixed(dimensions.area < 1e6 ? 3 : 1)} km² · fit ~z${zoom.toFixed(1)}`;
+  scale.className = micro ? 'status good' : 'status';
+  renderSpatialAdequacy();
 }
 
 async function onAoiChanged(aoi) {
@@ -177,6 +215,12 @@ document.querySelector('#drawAoi').addEventListener('click', event => {
   aoi.clear();
   aoi.enable();
   document.querySelector('#aoiStatus').textContent = 'Drag on the map to define AOI.';
+});
+
+document.querySelector('#fitAoi').addEventListener('click', () => {
+  if (!state.aoi) return;
+  const bounds = [[state.aoi.minLon, state.aoi.minLat], [state.aoi.maxLon, state.aoi.maxLat]];
+  map.fitBounds(bounds, { padding: 80, maxZoom: 21, duration: 450 });
 });
 
 document.querySelector('#clearAoi').addEventListener('click', () => {
@@ -227,7 +271,10 @@ document.querySelector('#mission').addEventListener('change', event => patchStat
 
 const environmentPanel = document.querySelector('#environmentPanel');
 const invalidateOnEnvironmentalEdit = event => {
-  if (event.target.matches('input, select')) invalidateEnvRequest();
+  if (event.target.matches('input, select')) {
+    invalidateEnvRequest();
+    renderSpatialAdequacy();
+  }
 };
 environmentPanel.addEventListener('input', invalidateOnEnvironmentalEdit);
 environmentPanel.addEventListener('change', invalidateOnEnvironmentalEdit);
@@ -235,20 +282,23 @@ environmentPanel.addEventListener('change', invalidateOnEnvironmentalEdit);
 document.querySelector('#buildEnvRequest').addEventListener('click', () => {
   const status = document.querySelector('#envRequestStatus');
   try {
-    const variables = [...document.querySelectorAll('#envVariables input:checked')].map(input => input.value);
+    const variables = selectedEnvironmentVariables();
     currentEnvRequest = buildEnvironmentalRequest({
       aoi: state.aoi,
       startDatetime: document.querySelector('#envStart').value,
       endDatetime: document.querySelector('#envEnd').value,
       minDepth: Number(document.querySelector('#envMinDepth').value),
       maxDepth: Number(document.querySelector('#envMaxDepth').value),
+      analysisGridM: Number(document.querySelector('#analysisGridM').value),
       variables
     });
     const copernicus = currentEnvRequest.source_jobs.filter(job => job.provider === 'Copernicus Marine').length;
     const publicOgc = currentEnvRequest.source_jobs.filter(job => job.execution === 'PUBLIC_OGC').length;
     const discovery = currentEnvRequest.source_jobs.filter(job => job.execution === 'CAPABILITY_DISCOVERY_REQUIRED').length;
-    status.textContent = `SOURCE-RESOLVED · ${variables.length} variables · ${currentEnvRequest.source_jobs.length} jobs · Copernicus ${copernicus} backend · public OGC ${publicOgc}${discovery ? ` · discovery ${discovery}` : ''}`;
-    status.className = 'status good';
+    const unresolved = currentEnvRequest.source_jobs.filter(job => job.spatial_adequacy?.status === 'UNRESOLVED').length;
+    const coarse = currentEnvRequest.source_jobs.filter(job => job.spatial_adequacy?.status === 'COARSE').length;
+    status.textContent = `SOURCE-RESOLVED · ${variables.length} variables · ${currentEnvRequest.source_jobs.length} jobs · Copernicus ${copernicus} backend · public OGC ${publicOgc}${discovery ? ` · discovery ${discovery}` : ''}${unresolved || coarse ? ` · spatial: ${unresolved} unresolved / ${coarse} coarse` : ''}`;
+    status.className = unresolved ? 'status warn' : 'status good';
     setRequestButtons(true);
     const bathyJob = currentEnvRequest.source_jobs.find(job => job.id === 'emodnet-bathymetry');
     const bathyLink = document.querySelector('#openBathymetry');
@@ -308,4 +358,5 @@ document.querySelector('#optimize').addEventListener('click', () => {
 
 updateLegend();
 setRequestButtons(false);
-window.__MSO__ = { map, layers, contours, aoi, state, updateLegend, buildEnvironmentalRequest };
+renderSpatialAdequacy();
+window.__MSO__ = { map, layers, contours, aoi, state, updateLegend, buildEnvironmentalRequest, aoiDimensionsMeters, resolutionAssessment };

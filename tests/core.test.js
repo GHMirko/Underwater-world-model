@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { aoiToGeoJSON } from '../src/map/aoi-controller.js';
 import { contourThreshold, filterContours } from '../src/map/contour-model.js';
 import { chartReliefExpression, legendModel } from '../src/map/depth-legend.js';
+import { aoiDimensionsMeters, expandAoiByMeters, recommendedZoomForAoi, resolutionAssessment } from '../src/map/spatial-scale.js';
 import { buildCopernicusPython, buildEmodnetBathymetryUrl, buildEnvironmentalRequest, estimateBathymetryCells } from '../src/data/environmental-request.js';
 import { ENVIRONMENT_VARIABLES } from '../src/data/source-registry.js';
 import { ASSETS, areaKm2, combinations, dominates, optimize } from '../src/optimizer/core.js';
@@ -79,6 +80,8 @@ test('environment registry maps Mediterranean 3D hourly temperature salinity and
   assert.equal(ENVIRONMENT_VARIABLES.salinity.datasetId, 'cmems_mod_med_phy-sal_anfc_4.2km-3D_PT1H-m');
   assert.equal(ENVIRONMENT_VARIABLES.currents.datasetId, 'cmems_mod_med_phy-cur_anfc_4.2km-3D_PT1H-m');
   assert.deepEqual(ENVIRONMENT_VARIABLES.currents.variables, ['uo', 'vo']);
+  assert.equal(ENVIRONMENT_VARIABLES.currents.nativeHorizontalResolutionM, 4200);
+  assert.equal(ENVIRONMENT_VARIABLES.bathymetry.nativeHorizontalResolutionM, 115);
 });
 
 test('environmental request resolves source jobs and plans sound speed only from T and S', () => {
@@ -88,10 +91,12 @@ test('environmental request resolves source jobs and plans sound speed only from
     endDatetime: '2026-10-29T16:00',
     minDepth: 0,
     maxDepth: 500,
+    analysisGridM: 25,
     variables: ['temperature', 'salinity', 'currents', 'bathymetry', 'seabed_substrate']
   });
   assert.equal(request.source_jobs.length, 5);
   assert.deepEqual(request.bbox, [15, 38, 16, 39]);
+  assert.equal(request.spatial_profile.target_analysis_grid_m, 25);
   assert.equal(request.package_plan.gridded, 'environment.nc');
   assert.equal(request.package_plan.seabedVector, 'seabed.geojson');
   assert.equal(request.derived_products[0].id, 'sound_speed');
@@ -121,4 +126,36 @@ test('generated Copernicus worker script contains no credentials and uses resolv
   assert.match(script, /copernicusmarine\.subset/);
   assert.match(script, /cmems_mod_med_phy-tem_anfc_4\.2km-3D_PT1H-m/);
   assert.doesNotMatch(script.toLowerCase(), /password|username|token/);
+});
+
+test('400 m micro-AOI recommends zoom beyond 16 and exposes source resolution limits', () => {
+  const aoi = { minLon: 15, maxLon: 15.0047, minLat: 40, maxLat: 40.0036 };
+  const dimensions = aoiDimensionsMeters(aoi);
+  assert.ok(dimensions.width > 350 && dimensions.width < 450);
+  assert.ok(dimensions.height > 350 && dimensions.height < 450);
+  assert.ok(recommendedZoomForAoi(aoi) > 16);
+  assert.equal(resolutionAssessment(aoi, 4200).status, 'UNRESOLVED');
+  assert.equal(resolutionAssessment(aoi, 115).status, 'COARSE');
+});
+
+test('micro-AOI Copernicus jobs fetch context while preserving target AOI and target grid', () => {
+  const aoi = { minLon: 15, maxLon: 15.0047, minLat: 40, maxLat: 40.0036 };
+  const request = buildEnvironmentalRequest({
+    aoi,
+    startDatetime: '2026-10-28T16:00',
+    endDatetime: '2026-10-29T16:00',
+    minDepth: 0,
+    maxDepth: 300,
+    analysisGridM: 20,
+    variables: ['temperature', 'bathymetry']
+  });
+  const temperature = request.source_jobs.find(job => job.id === 'copernicus-temperature');
+  assert.equal(temperature.spatial_adequacy.status, 'UNRESOLVED');
+  assert.ok(temperature.context_buffer_m > 4000);
+  assert.ok(temperature.subset.bbox[0] < aoi.minLon);
+  assert.ok(temperature.subset.bbox[2] > aoi.maxLon);
+  assert.deepEqual(temperature.subset.target_aoi_bbox, request.bbox);
+  assert.equal(request.spatial_profile.target_analysis_grid_m, 20);
+  const expanded = expandAoiByMeters(aoi, 1000);
+  assert.ok(expanded.minLon < aoi.minLon && expanded.maxLat > aoi.maxLat);
 });

@@ -9,7 +9,9 @@ export const ENVIRONMENT_VARIABLES = Object.freeze({
     variables: ['thetao'],
     structure: 'grid-4d',
     canonicalFormat: 'netcdf',
-    execution: 'backend-required'
+    execution: 'backend-required',
+    nativeHorizontalResolutionM: 4200,
+    resolutionNote: 'Regional model grid ~1/24°; treat as background environmental state for micro-AOIs.'
   }),
   salinity: Object.freeze({
     id: 'salinity',
@@ -21,7 +23,9 @@ export const ENVIRONMENT_VARIABLES = Object.freeze({
     variables: ['so'],
     structure: 'grid-4d',
     canonicalFormat: 'netcdf',
-    execution: 'backend-required'
+    execution: 'backend-required',
+    nativeHorizontalResolutionM: 4200,
+    resolutionNote: 'Regional model grid ~1/24°; treat as background environmental state for micro-AOIs.'
   }),
   currents: Object.freeze({
     id: 'currents',
@@ -33,7 +37,9 @@ export const ENVIRONMENT_VARIABLES = Object.freeze({
     variables: ['uo', 'vo'],
     structure: 'grid-4d',
     canonicalFormat: 'netcdf',
-    execution: 'backend-required'
+    execution: 'backend-required',
+    nativeHorizontalResolutionM: 4200,
+    resolutionNote: 'Regional model grid ~1/24°; sub-grid variation inside micro-AOIs is not resolved.'
   }),
   bathymetry: Object.freeze({
     id: 'bathymetry',
@@ -46,7 +52,9 @@ export const ENVIRONMENT_VARIABLES = Object.freeze({
     structure: 'grid-2d',
     sourceFormat: 'geotiff',
     canonicalFormat: 'netcdf',
-    execution: 'browser-public'
+    execution: 'browser-public',
+    nativeHorizontalResolutionM: 115,
+    resolutionNote: 'Standard European DTM ~115 m. Higher-resolution local DTMs should be preferred when available.'
   }),
   seabed_substrate: Object.freeze({
     id: 'seabed_substrate',
@@ -59,7 +67,9 @@ export const ENVIRONMENT_VARIABLES = Object.freeze({
     structure: 'vector-polygons',
     sourceFormat: 'geojson',
     canonicalFormat: 'geojson',
-    execution: 'capability-discovery-required'
+    execution: 'capability-discovery-required',
+    nativeHorizontalResolutionM: null,
+    resolutionNote: 'Vector map scale varies by source; adequacy must be assessed from source metadata.'
   })
 });
 

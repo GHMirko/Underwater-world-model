@@ -11,12 +11,13 @@ function baseStyle(baseKey = 'chart') {
         type: 'raster',
         tiles: base.tiles,
         tileSize: 256,
+        maxzoom: base.nativeMaxZoom ?? 16,
         attribution: base.attribution
       }
     },
     layers: [
       { id: 'background', type: 'background', paint: { 'background-color': '#173248' } },
-      { id: 'base', type: 'raster', source: 'base' }
+      { id: 'base', type: 'raster', source: 'base', paint: { 'raster-resampling': 'linear' } }
     ]
   };
 }
@@ -28,12 +29,12 @@ export function createMap(container, baseKey = 'chart') {
     center: [24.2051, 36.62451],
     zoom: 7.1,
     minZoom: 1,
-    maxZoom: 16,
+    maxZoom: 22,
     attributionControl: true
   });
 
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), 'top-right');
-  map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
+  map.addControl(new maplibregl.ScaleControl({ unit: 'metric', maxWidth: 140 }), 'bottom-right');
   map.addControl(new maplibregl.FullscreenControl(), 'top-right');
   return map;
 }

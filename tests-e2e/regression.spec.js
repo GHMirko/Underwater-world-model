@@ -21,7 +21,7 @@ async function drawAoi(page, from = { x: 180, y: 180 }, to = { x: 430, y: 360 })
   await expect(page.locator('#aoiStatus')).not.toContainText('No AOI selected');
 }
 
-test('critical flow survives map/layer/data-request changes and external network failure', async ({ page }) => {
+test('critical flow survives micro-AOI map/layer/data-request changes and external network failure', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
@@ -30,9 +30,23 @@ test('critical flow survives map/layer/data-request changes and external network
   await expect(page.locator('#depthLegend')).toContainText('Depth shading');
   await expect(page.locator('#downloadManifest')).toBeDisabled();
 
-  await drawAoi(page);
+  const maxZoom = await page.evaluate(() => window.__MSO__.map.getMaxZoom());
+  expect(maxZoom).toBe(22);
+  await page.evaluate(() => window.__MSO__.map.setZoom(17));
+  await page.waitForTimeout(250);
+
+  await drawAoi(page, { x: 150, y: 130 }, { x: 550, y: 530 });
+  await expect(page.locator('#aoiScaleStatus')).toContainText('MICRO-AOI');
+  await expect(page.locator('#fitAoi')).toBeEnabled();
+  await expect(page.locator('#spatialAdequacy')).toContainText('UNRESOLVED');
+  await expect(page.locator('#spatialAdequacy')).toContainText('COARSE');
+  await page.locator('#fitAoi').click();
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => window.__MSO__.map.getZoom())).toBeGreaterThan(16);
+
   await page.locator('#clearAoi').click();
   await expect(page.locator('#aoiStatus')).toContainText('No AOI selected');
+  await expect(page.locator('#fitAoi')).toBeDisabled();
 
   await page.locator('#baseMap').selectOption('satellite');
   await page.locator('#bathyMode').selectOption('emodnet-multicolour');
@@ -42,13 +56,16 @@ test('critical flow survives map/layer/data-request changes and external network
   await page.locator('#contours').uncheck();
   await page.locator('#contours').check();
 
-  await drawAoi(page, { x: 220, y: 220 }, { x: 500, y: 390 });
+  await page.evaluate(() => window.__MSO__.map.setZoom(17));
+  await drawAoi(page, { x: 180, y: 150 }, { x: 560, y: 500 });
   await expect(page.locator('#bathyStatus')).toContainText(/Numeric bathymetry unavailable|REAL EMODnet/);
 
   await expect(page.locator('#envVariables input:checked')).toHaveCount(5);
+  await page.locator('#analysisGridM').fill('20');
   await page.locator('#buildEnvRequest').click();
   await expect(page.locator('#envRequestStatus')).toContainText('SOURCE-RESOLVED');
   await expect(page.locator('#envRequestStatus')).toContainText('5 jobs');
+  await expect(page.locator('#envRequestStatus')).toContainText('spatial:');
   await expect(page.locator('#downloadManifest')).toBeEnabled();
   await expect(page.locator('#downloadAoi')).toBeEnabled();
   await expect(page.locator('#downloadCopernicus')).toBeEnabled();
