@@ -1,4 +1,5 @@
 import { fetchEmodnetWcsGrid, EMODNET_STANDARD_RESOLUTION_M } from '../data/emodnet-wcs.js';
+import { applyWaterMaskToGrid, fetchEmodnetWaterMask } from '../data/emodnet-water-mask.js';
 import { state, patchState, subscribeState } from '../state.js';
 import { aoiDimensionsMeters } from './spatial-scale.js';
 import { AOI_ADAPTIVE_PALETTE, renderDepthLegend } from './depth-legend.js';
@@ -8,6 +9,7 @@ import { maplibregl } from './map-core.js';
 
 const GRID_SOURCE = 'aoi-wcs-grid-source';
 const GRID_LAYER = 'aoi-wcs-grid-layer';
+const COASTAL_LAYER = 'aoi-wcs-coastal-layer';
 let generation = 0;
 let activeAbort = null;
 let gridGeojson = { type: 'FeatureCollection', features: [] };
@@ -55,29 +57,42 @@ function adaptiveExpression(range) {
 }
 
 function cellsToGeojson(cells) {
-  return {
-    type: 'FeatureCollection',
-    features: cells.map(cell => ({
-      type: 'Feature',
-      properties: {
-        depth_m: cell.depth,
-        provenance: 'REAL_EMODNET_WCS_GEOTIFF',
-        native_resolution_m: EMODNET_STANDARD_RESOLUTION_M,
-        ix: cell.ix,
-        iy: cell.iy
-      },
-      geometry: {
-        type: 'Polygon',
-        coordinates: [[
-          [cell.west, cell.south],
-          [cell.east, cell.south],
-          [cell.east, cell.north],
-          [cell.west, cell.north],
-          [cell.west, cell.south]
-        ]]
-      }
-    }))
-  };
+  const features = [];
+  for (const cell of cells) {
+    const properties = {
+      depth_m: cell.depth,
+      provenance: 'REAL_EMODNET_WCS_GEOTIFF',
+      native_resolution_m: EMODNET_STANDARD_RESOLUTION_M,
+      ix: cell.ix,
+      iy: cell.iy,
+      water_fraction: cell.water_fraction ?? 1,
+      coastal_uncertain: Boolean(cell.coastal_uncertain),
+      shallow_water: Boolean(cell.shallow_water)
+    };
+    if (cell.coastal_uncertain) {
+      features.push({
+        type: 'Feature',
+        properties,
+        geometry: { type: 'Point', coordinates: [cell.lon ?? (cell.west + cell.east) / 2, cell.lat ?? (cell.south + cell.north) / 2] }
+      });
+    } else {
+      features.push({
+        type: 'Feature',
+        properties,
+        geometry: {
+          type: 'Polygon',
+          coordinates: [[
+            [cell.west, cell.south],
+            [cell.east, cell.south],
+            [cell.east, cell.north],
+            [cell.west, cell.north],
+            [cell.west, cell.south]
+          ]]
+        }
+      });
+    }
+  }
+  return { type: 'FeatureCollection', features };
 }
 
 function ensureGridLayer(map) {
@@ -96,6 +111,21 @@ function ensureGridLayer(map) {
       }
     });
   }
+  if (!map.getLayer(COASTAL_LAYER)) {
+    map.addLayer({
+      id: COASTAL_LAYER,
+      type: 'circle',
+      source: GRID_SOURCE,
+      layout: { visibility: state.bathyMode === 'aoi-adaptive' && lastGrid ? 'visible' : 'none' },
+      paint: {
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 2.5, 16, 5, 19, 9, 22, 15],
+        'circle-color': adaptiveExpression(lastGrid),
+        'circle-opacity': ['interpolate', ['linear'], ['get', 'water_fraction'], 0.18, 0.24, 0.5, 0.42, 0.82, 0.62],
+        'circle-stroke-color': 'rgba(235,249,255,.9)',
+        'circle-stroke-width': 0.8
+      }
+    });
+  }
   return true;
 }
 
@@ -103,12 +133,16 @@ function renderGrid(map) {
   if (!ensureGridLayer(map)) return;
   const source = map.getSource(GRID_SOURCE);
   if (source) source.setData(gridGeojson);
+  const visible = state.bathyMode === 'aoi-adaptive' && lastGrid ? 'visible' : 'none';
   if (map.getLayer(GRID_LAYER)) {
-    map.setLayoutProperty(GRID_LAYER, 'visibility', state.bathyMode === 'aoi-adaptive' && lastGrid ? 'visible' : 'none');
+    map.setLayoutProperty(GRID_LAYER, 'visibility', visible);
     map.setPaintProperty(GRID_LAYER, 'fill-color', adaptiveExpression(lastGrid));
     map.setPaintProperty(GRID_LAYER, 'fill-opacity', currentOpacity());
   }
-  // Keep AOI boundary legible above the numeric field.
+  if (map.getLayer(COASTAL_LAYER)) {
+    map.setLayoutProperty(COASTAL_LAYER, 'visibility', visible);
+    map.setPaintProperty(COASTAL_LAYER, 'circle-color', adaptiveExpression(lastGrid));
+  }
   if (map.getLayer('aoi-line')) map.moveLayer('aoi-line');
 }
 
@@ -168,6 +202,7 @@ function clear(map) {
   clearMarkers();
   if (map.getSource(GRID_SOURCE)) map.getSource(GRID_SOURCE).setData(gridGeojson);
   if (map.getLayer(GRID_LAYER)) map.setLayoutProperty(GRID_LAYER, 'visibility', 'none');
+  if (map.getLayer(COASTAL_LAYER)) map.setLayoutProperty(COASTAL_LAYER, 'visibility', 'none');
   if (state.bathymetryGridSource === 'EMODNET_WCS') {
     patchState({ bathymetryGridSource: null, bathymetryGrid: null, bathymetryQuality: null, adaptiveContours: null });
   }
@@ -196,13 +231,26 @@ async function load(map, aoi) {
   activeAbort = controller;
   const status = statusElement();
   if (status) {
-    status.textContent = 'AOI REAL WCS bathymetry: loading EMODnet numeric GeoTIFF…';
+    status.textContent = 'AOI REAL WCS bathymetry: loading numeric GeoTIFF + no-land coastal mask…';
     status.className = 'status warn';
   }
 
   try {
-    const grid = await fetchEmodnetWcsGrid(aoi, { signal: controller.signal });
+    const rawGrid = await fetchEmodnetWcsGrid(aoi, { signal: controller.signal });
     if (current !== generation || controller.signal.aborted) return;
+
+    let grid = rawGrid;
+    let maskNote = 'mask unavailable';
+    try {
+      const mask = await fetchEmodnetWaterMask(aoi, { signal: controller.signal });
+      if (current !== generation || controller.signal.aborted) return;
+      grid = applyWaterMaskToGrid(rawGrid, mask);
+      maskNote = `${grid.masked_land_cells} land cells masked · ${grid.coastal_cells} coastal cells uncertain`;
+    } catch (maskError) {
+      if (maskError?.name === 'AbortError') throw maskError;
+      maskNote = `no-land mask unavailable: ${maskError?.message ?? 'request failed'}`;
+    }
+
     const dimensions = aoiDimensionsMeters(aoi);
     const quality = assessBathymetryConfidence({
       aoiWidthM: dimensions.width,
@@ -226,7 +274,8 @@ async function load(map, aoi) {
         confidence_score: quality.confidence_score,
         coverage_ratio: quality.coverage_ratio,
         estimated_horizontal_uncertainty_m: quality.estimated_horizontal_uncertainty_m,
-        fitness_for_use: quality.fitness_for_use
+        fitness_for_use: quality.fitness_for_use,
+        coastal_mask: grid.water_mask_applied ? grid.water_mask_source : null
       }
     });
     const summary = contourSummary(rawContours, scheme, quality);
@@ -235,6 +284,9 @@ async function load(map, aoi) {
     summary.grid = `${grid.nx}x${grid.ny}`;
     summary.valid_cells = grid.valid_cells;
     summary.total_cells = grid.total_cells;
+    summary.water_mask_applied = Boolean(grid.water_mask_applied);
+    summary.coastal_cells = grid.coastal_cells ?? 0;
+    summary.masked_land_cells = grid.masked_land_cells ?? 0;
 
     wcsContours = rawContours;
     lastGrid = {
@@ -246,6 +298,9 @@ async function load(map, aoi) {
       nx: grid.nx,
       ny: grid.ny,
       source: 'REAL_EMODNET_WCS_GEOTIFF',
+      water_mask_applied: Boolean(grid.water_mask_applied),
+      coastal_cells: grid.coastal_cells ?? 0,
+      masked_land_cells: grid.masked_land_cells ?? 0,
       quality,
       contour_summary: summary
     };
@@ -263,7 +318,8 @@ async function load(map, aoi) {
 
     const assessment = contourDisplayAssessment(summary);
     if (status) {
-      status.textContent = `AOI REAL WCS grid · ${grid.nx}×${grid.ny} · ${grid.valid_cells}/${grid.total_cells} valid cells · ${grid.min.toFixed(1)}–${grid.max.toFixed(1)} m · ${scheme.interval_m} m contours · ${assessment.ready ? 'LOCAL ACCEPTED' : `LOCAL INSUFFICIENT: ${assessment.reason}`}`;
+      const shallow = scheme.levels.filter(level => level.shallow_priority).map(level => `${level.depth_m}m`).join('/');
+      status.textContent = `AOI REAL WCS · ${grid.nx}×${grid.ny} · ${grid.valid_cells}/${grid.total_cells} wet-depth cells · ${grid.min.toFixed(1)}–${grid.max.toFixed(1)} m · ${scheme.interval_m} m contours${shallow ? ` + shallow ${shallow}` : ''} · ${maskNote} · ${assessment.ready ? 'LOCAL ACCEPTED' : `LOCAL INSUFFICIENT: ${assessment.reason}`}`;
       status.className = assessment.ready ? 'status good' : 'status warn';
     }
   } catch (error) {
@@ -282,7 +338,7 @@ statusElement();
 ensureGridLayer(map);
 
 const badge = document.querySelector('.header .badge');
-if (badge) badge.textContent = 'GitHub v0.17 WCS Numeric Bathymetry';
+if (badge) badge.textContent = 'GitHub v0.17.2 Coastal Mask + Shallow Water';
 
 const opacitySlider = document.querySelector('#depthOpacity');
 if (opacitySlider) opacitySlider.addEventListener('input', () => renderGrid(map));
