@@ -32,7 +32,7 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await expect(page.locator('.header .badge').first()).toContainText('v0.18');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.19');
   await expect(page.locator('#baseMap option')).toHaveCount(2);
   await expect(page.locator('#baseMap')).toContainText('Minimal');
   await expect(page.locator('#baseMap')).toContainText('Satellite');
@@ -51,6 +51,10 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   await drawAoi(page, { x: 150, y: 130 }, { x: 550, y: 530 });
 
   await expect(page.locator('#aoiScaleStatus')).toContainText('MICRO-AOI');
+  await expect(page.locator('#bathyBrokerStatus')).toContainText('BEST AVAILABLE PLAN');
+  await expect(page.locator('#bathyBrokerStatus')).toContainText('baseline EMODNET_STANDARD_DTM');
+  await expect(page.locator('#downloadBathyPlan')).toBeEnabled();
+  await expect(page.locator('#bathyBrokerCandidates .source-candidate')).toHaveCount(7);
   await expect(page.locator('#fitAoi')).toBeEnabled();
   await expect(page.locator('#bathyStatus')).toContainText('REAL EMODnet');
   await expect(page.locator('#aoiDepthGridStatus')).toContainText('confidence');

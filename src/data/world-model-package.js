@@ -3,7 +3,7 @@ function clean(value) {
 }
 
 function bathymetryLayer(state, environmentalRequest) {
-  const job = environmentalRequest?.source_jobs?.find(item => item.id === 'emodnet-bathymetry' || item.id === 'emodnet-hr-bathymetry') ?? null;
+  const job = environmentalRequest?.source_jobs?.find(item => ['emodnet-bathymetry', 'emodnet-hr-bathymetry', 'gebco-2026-bathymetry'].includes(item.id)) ?? null;
   const grid = state.bathymetryGrid;
   const quality = state.bathymetryQuality;
   const contours = state.adaptiveContours;
@@ -11,13 +11,15 @@ function bathymetryLayer(state, environmentalRequest) {
     id: 'bathymetry',
     layer_class: 'ENVIRONMENTAL_BASE_LAYER',
     analytical_source: {
-      provider: 'EMODnet Bathymetry',
-      source_id: grid?.source ?? job?.source_selector?.selected_source ?? 'EMODNET_STANDARD_DTM',
+      provider: job?.provider ?? 'EMODnet Bathymetry',
+      source_id: grid?.source ?? job?.source_selector?.selected_source ?? job?.product_id ?? 'EMODNET_STANDARD_DTM',
       service: job?.service ?? 'WCS',
       request_url: job?.request_url ?? null,
       native_horizontal_resolution_m: clean(quality?.native_resolution_m ?? job?.native_horizontal_resolution_m),
       source_format: job?.source_output?.format ?? 'geotiff',
-      vertical_semantics: { quantity: 'depth', units: 'm', positive: 'down' },
+      source_vertical_semantics: job?.source_vertical_semantics ?? { quantity: 'depth', units: 'm', positive: 'down' },
+      normalized_vertical_semantics: { quantity: 'depth', units: 'm', positive: 'down' },
+      normalization: job?.normalization ?? null,
       crs: 'EPSG:4326',
       provenance: job?.provenance ?? 'EMODnet numeric bathymetry',
       authoritative_for_predictors: true
@@ -86,7 +88,7 @@ export function buildWorldModelPackage({ state, environmentalRequest }) {
   if (!state?.aoi) throw new Error('AOI is required for the World Model Package');
   if (!environmentalRequest) throw new Error('Build the Environmental Data Request before the World Model Package');
   return {
-    schema: 'underwater-world-model-aoi-package/0.1',
+    schema: 'underwater-world-model-aoi-package/0.2',
     created_at: new Date().toISOString(),
     mission: state.mission,
     aoi: { ...state.aoi },
@@ -99,9 +101,43 @@ export function buildWorldModelPackage({ state, environmentalRequest }) {
       uncertainty: 'Best available information is retained with confidence, coverage, resolution and fitness-for-use metadata.',
       validity: { valid_until: null, rerun_at: null, event_driven_reassessment: true }
     },
+    bathymetry_source_broker: state.bathymetryDiscoveryPlan ? {
+      schema: state.bathymetryDiscoveryPlan.schema,
+      area_profile: state.bathymetryDiscoveryPlan.area_profile,
+      policy: state.bathymetryDiscoveryPlan.policy,
+      recommended_strategy: state.bathymetryDiscoveryPlan.recommended_strategy,
+      runtime_discovery: state.bathymetryDiscoveryPlan.runtime_discovery ?? null,
+      candidates: state.bathymetryDiscoveryPlan.candidates?.map(item => ({
+        id: item.id,
+        label: item.label,
+        provider: item.provider,
+        use_class: item.use_class,
+        source_class: item.source_class,
+        applicability: item.applicability,
+        execution: item.execution,
+        availability: item.availability,
+        ready_for_use: item.ready_for_use,
+        access: item.access,
+        licence: item.licence,
+        metadata_url: item.metadata_url ?? null,
+        typical_resolution_m: item.typical_resolution_m,
+        vertical_datum: item.vertical_datum,
+        score: item.score,
+        predictor: item.predictor,
+        viewer: item.viewer,
+        note: item.note
+      })) ?? []
+    } : null,
+    synthesis_contract: {
+      target: 'ANALYSIS_READY_UNDERWATER_WORLD_MODEL',
+      cell_schema: ['value', 'source_id', 'native_resolution_m', 'vertical_datum', 'derivation', 'uncertainty', 'confidence', 'valid_time', 'fitness_for_use'],
+      source_priority: 'qualified local numeric > regional/national HR > EMODnet HR/source survey > constrained ENC/SDB/CSB supplements > EMODnet standard > GEBCO global fallback',
+      display_policy: 'viewer derives colormap/isobaths from the World Model; display products never overwrite analytical values',
+      update_policy: 'new local observations may supersede lower-confidence prior cells while preserving lineage'
+    },
     layers: {
       bathymetry: bathymetryLayer(state, environmentalRequest),
-      source_jobs: (environmentalRequest.source_jobs ?? []).filter(job => !['emodnet-bathymetry', 'emodnet-hr-bathymetry'].includes(job.id)).map(sourceLayer),
+      source_jobs: (environmentalRequest.source_jobs ?? []).filter(job => !['emodnet-bathymetry', 'emodnet-hr-bathymetry', 'gebco-2026-bathymetry'].includes(job.id)).map(sourceLayer),
       planned_derived_products: environmentalRequest.derived_products ?? []
     },
     extraction_contract: {

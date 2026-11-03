@@ -294,7 +294,7 @@ function configureClientUi(app) {
   }
   const bathySelect = document.querySelector('#bathyMode');
   if (bathySelect) {
-    bathySelect.innerHTML = `<option value="aoi-adaptive">AOI REAL · adaptive min/max</option><option value="emodnet-multicolour">EMODnet Multicolour · context WMS</option><option value="emodnet-rainbow">EMODnet Rainbow · context WMS</option><option value="chart-relief">Chart Relief · context only</option><option value="none">None</option>`;
+    bathySelect.innerHTML = `<option value="aoi-adaptive">AOI REAL · adaptive min/max</option><option value="emodnet-multicolour">EMODnet Multicolour · Europe context WMS</option><option value="emodnet-rainbow">EMODnet Rainbow · Europe context WMS</option><option value="gebco-global">GEBCO 2026 · global context WMS</option><option value="chart-relief">Chart Relief · context only</option><option value="none">None</option>`;
     bathySelect.value = state.bathyMode;
   }
   layers.setBathymetry(state.bathyMode);

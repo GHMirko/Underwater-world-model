@@ -232,7 +232,4 @@ map.on('idle', () => {
   }
 });
 
-const badge = document.querySelector('.header .badge');
-if (badge) badge.textContent = 'GitHub v0.18 Continuous Bathymetry + World Model Package';
-
 schedule(map, 150);

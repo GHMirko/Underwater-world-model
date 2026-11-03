@@ -217,8 +217,6 @@ function apply(map) {
     document.body.classList.toggle('wcs-readable-cartography', active());
     styleLayers(map);
     renderLabels(map);
-    const badge = document.querySelector('.header .badge');
-    if (badge) badge.textContent = 'GitHub v0.17.2 Coastal Mask + Shallow Water';
   } finally {
     applying = false;
   }

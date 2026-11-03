@@ -11,6 +11,14 @@ export const ENVIRONMENT_VARIABLES = Object.freeze({
     canonicalFormat: 'netcdf',
     execution: 'backend-required',
     nativeHorizontalResolutionM: 4200,
+    coverageBbox: [-17.29, 30.19, 36.29, 45.98],
+    globalFallback: Object.freeze({
+      productId: 'GLOBAL_ANALYSISFORECAST_PHY_001_024',
+      datasetId: 'cmems_mod_glo_phy-thetao_anfc_0.083deg_PT6H-i',
+      variables: ['thetao'],
+      nativeHorizontalResolutionM: 9200,
+      temporalResolution: '6-hourly'
+    }),
     resolutionNote: 'Regional model grid ~1/24°; treat as background environmental state for micro-AOIs.'
   }),
   salinity: Object.freeze({
@@ -25,6 +33,14 @@ export const ENVIRONMENT_VARIABLES = Object.freeze({
     canonicalFormat: 'netcdf',
     execution: 'backend-required',
     nativeHorizontalResolutionM: 4200,
+    coverageBbox: [-17.29, 30.19, 36.29, 45.98],
+    globalFallback: Object.freeze({
+      productId: 'GLOBAL_ANALYSISFORECAST_PHY_001_024',
+      datasetId: 'cmems_mod_glo_phy-so_anfc_0.083deg_PT6H-i',
+      variables: ['so'],
+      nativeHorizontalResolutionM: 9200,
+      temporalResolution: '6-hourly'
+    }),
     resolutionNote: 'Regional model grid ~1/24°; treat as background environmental state for micro-AOIs.'
   }),
   currents: Object.freeze({
@@ -39,6 +55,14 @@ export const ENVIRONMENT_VARIABLES = Object.freeze({
     canonicalFormat: 'netcdf',
     execution: 'backend-required',
     nativeHorizontalResolutionM: 4200,
+    coverageBbox: [-17.29, 30.19, 36.29, 45.98],
+    globalFallback: Object.freeze({
+      productId: 'GLOBAL_ANALYSISFORECAST_PHY_001_024',
+      datasetId: 'cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i',
+      variables: ['uo', 'vo'],
+      nativeHorizontalResolutionM: 9200,
+      temporalResolution: '6-hourly'
+    }),
     resolutionNote: 'Regional model grid ~1/24°; sub-grid variation inside micro-AOIs is not resolved.'
   }),
   bathymetry: Object.freeze({

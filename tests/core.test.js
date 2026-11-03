@@ -8,6 +8,7 @@ import { assessBathymetryConfidence, buildAdaptiveContours, chooseContourScheme,
 import { aoiDimensionsMeters, expandAoiByMeters, recommendedZoomForAoi, resolutionAssessment } from '../src/map/spatial-scale.js';
 import { buildCopernicusPython, buildEmodnetBathymetryUrl, buildEnvironmentalRequest, estimateBathymetryCells } from '../src/data/environmental-request.js';
 import { ENVIRONMENT_VARIABLES } from '../src/data/source-registry.js';
+import { buildBathymetryDiscoveryPlan } from '../src/data/bathymetry-source-broker.js';
 import { ASSETS, areaKm2, combinations, dominates, optimize } from '../src/optimizer/core.js';
 
 test('AOI converts to a closed polygon', () => {
@@ -71,12 +72,13 @@ test('chart relief elevation stops are strictly ascending', () => {
 });
 
 test('viewer bathymetry separates AOI numeric mode from context WMS and source-matches contours', () => {
-  assert.deepEqual(Object.keys(BATHYMETRY), ['aoi-adaptive', 'chart-relief', 'emodnet-rainbow', 'emodnet-multicolour', 'none']);
+  assert.deepEqual(Object.keys(BATHYMETRY), ['aoi-adaptive', 'chart-relief', 'emodnet-rainbow', 'gebco-global', 'emodnet-multicolour', 'none']);
   assert.equal(BATHYMETRY['aoi-adaptive'].numeric, true);
   assert.equal(contourFamilyForBathymetry('aoi-adaptive'), 'none');
   assert.equal(contourFamilyForBathymetry('chart-relief'), 'seascape');
   assert.equal(contourFamilyForBathymetry('emodnet-rainbow'), 'emodnet');
   assert.equal(contourFamilyForBathymetry('emodnet-multicolour'), 'emodnet');
+  assert.equal(contourFamilyForBathymetry('gebco-global'), 'none');
   assert.equal(contourFamilyForBathymetry('none'), 'none');
   const expression = chartReliefExpression();
   assert.equal(expression.at(-1), 'rgba(0,0,0,0)');
@@ -241,4 +243,31 @@ test('micro-AOI Copernicus jobs fetch context while preserving target AOI and ta
   assert.equal(request.spatial_profile.target_analysis_grid_m, 20);
   const expanded = expandAoiByMeters(aoi, 1000);
   assert.ok(expanded.minLon < aoi.minLon && expanded.maxLat > aoi.maxLat);
+});
+
+
+test('global AOI resolves Copernicus global physics and GEBCO bathymetry fallback', () => {
+  const aoi = { minLon: 139.7, maxLon: 139.9, minLat: 35.5, maxLat: 35.7 };
+  const bathymetryDiscoveryPlan = buildBathymetryDiscoveryPlan(aoi, { targetGridM: 50 });
+  const request = buildEnvironmentalRequest({
+    aoi,
+    startDatetime: '2026-11-03T00:00',
+    endDatetime: '2026-11-04T00:00',
+    minDepth: 0,
+    maxDepth: 500,
+    analysisGridM: 50,
+    variables: ['temperature', 'salinity', 'currents', 'bathymetry', 'seabed_substrate'],
+    bathymetryDiscoveryPlan
+  });
+  assert.equal(request.region_profile, 'GLOBAL_OCEAN');
+  const temperature = request.source_jobs.find(job => job.id === 'copernicus-temperature');
+  const currents = request.source_jobs.find(job => job.id === 'copernicus-currents');
+  const bathy = request.source_jobs.find(job => job.id === 'gebco-2026-bathymetry');
+  const substrate = request.source_jobs.find(job => job.id === 'seabed-substrate-unresolved-global');
+  assert.equal(temperature.product_id, 'GLOBAL_ANALYSISFORECAST_PHY_001_024');
+  assert.equal(temperature.source_profile, 'GLOBAL');
+  assert.equal(currents.dataset_id, 'cmems_mod_glo_phy-cur_anfc_0.083deg_PT6H-i');
+  assert.equal(bathy.provider, 'GEBCO');
+  assert.equal(bathy.native_horizontal_resolution_m, 463);
+  assert.equal(substrate.spatial_adequacy.status, 'UNRESOLVED');
 });

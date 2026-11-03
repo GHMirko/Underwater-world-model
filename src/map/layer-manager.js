@@ -1,4 +1,4 @@
-import { BATHYMETRY, SEASCAPE_RASTER, emodnetWms, visualBathymetryStack } from './config.js';
+import { BATHYMETRY, SEASCAPE_RASTER, emodnetWms, gebcoWms, visualBathymetryStack } from './config.js';
 import { chartReliefExpression } from './depth-legend.js';
 
 const IDS = {
@@ -46,8 +46,7 @@ export class LayerManager {
     safeRemove(this.map, IDS.fallbackLayer, IDS.fallbackSource);
   }
 
-  _addEmodnetRaster(sourceId, layerId, layerName, opacity) {
-    const tile = emodnetWms(layerName);
+  _addRasterWms(sourceId, layerId, tile, opacity) {
     this.map.addSource(sourceId, {
       type: 'raster',
       tiles: [tile],
@@ -64,6 +63,14 @@ export class LayerManager {
         'raster-resampling': 'linear'
       }
     });
+  }
+
+  _addEmodnetRaster(sourceId, layerId, layerName, opacity) {
+    this._addRasterWms(sourceId, layerId, emodnetWms(layerName), opacity);
+  }
+
+  _addGebcoRaster(sourceId, layerId, layerName, opacity) {
+    this._addRasterWms(sourceId, layerId, gebcoWms(layerName), opacity);
   }
 
   renderBathymetry() {
@@ -106,6 +113,11 @@ export class LayerManager {
           resampling: 'nearest'
         }
       });
+      return true;
+    }
+
+    if (spec.provider === 'gebco') {
+      this._addGebcoRaster(IDS.bathySource, IDS.bathyLayer, spec.layer, this.depthOpacity);
       return true;
     }
 
