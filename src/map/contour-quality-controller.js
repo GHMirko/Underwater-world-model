@@ -27,6 +27,13 @@ function setVisibility(layerId, visible) {
   }
 }
 
+function authoritativeContours() {
+  if (state.bathymetryGridSource === 'EMODNET_WCS' && window.__MSO__.getWcsLocalContours) {
+    return window.__MSO__.getWcsLocalContours();
+  }
+  return window.__MSO__.getLocalContours();
+}
+
 function applyQualityPolicy() {
   if (applying || !map.isStyleLoaded()) return;
   applying = true;
@@ -38,15 +45,15 @@ function applyQualityPolicy() {
     const ready = adaptive && assessment.ready;
 
     if (map.getSource(LOCAL_SOURCE) && ready && !recovery) {
-      const stitched = stitchContourSegments(window.__MSO__.getLocalContours());
+      const stitched = stitchContourSegments(authoritativeContours());
       map.getSource(LOCAL_SOURCE).setData(stitched);
     }
 
     // This controller is the final authority for derived-contour visibility.
-    // Earlier renderers may recreate layers during style/state transitions,
-    // but they may not override the user's isobath toggle or the quality gate.
+    // WCS numeric contours take precedence over REST/recovery geometry when
+    // a full numeric raster has been acquired for the AOI.
     setVisibility(LOCAL_LAYER, ready && !recovery);
-    setVisibility(RECOVERY_LAYER, ready && recovery);
+    setVisibility(RECOVERY_LAYER, ready && recovery && state.bathymetryGridSource !== 'EMODNET_WCS');
   } finally {
     applying = false;
   }
@@ -63,6 +70,7 @@ function scheduleApply() {
 subscribeState((next, patch) => {
   if (
     Object.prototype.hasOwnProperty.call(patch, 'adaptiveContours') ||
+    Object.prototype.hasOwnProperty.call(patch, 'bathymetryGridSource') ||
     Object.prototype.hasOwnProperty.call(patch, 'bathyMode') ||
     Object.prototype.hasOwnProperty.call(patch, 'contours') ||
     Object.prototype.hasOwnProperty.call(patch, 'contourDensity') ||
