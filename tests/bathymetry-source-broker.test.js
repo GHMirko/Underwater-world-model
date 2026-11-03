@@ -19,7 +19,7 @@ test('global AOI outside EMODnet coverage falls back to GEBCO while retaining gl
     { minLon: 139.70, minLat: 35.50, maxLon: 139.90, maxLat: 35.70 },
     { targetGridM: 50 }
   );
-  assert.equal(plan.recommended_strategy.current_executable_baseline, 'GEBCO_2025');
+  assert.equal(plan.recommended_strategy.current_executable_baseline, 'GEBCO_2026');
   assert.equal(plan.candidates.some(item => item.id === 'EMODNET_STANDARD_DTM'), false);
   assert.ok(plan.candidates.some(item => item.id === 'IHO_DCDB_CSB'));
   assert.ok(plan.candidates.some(item => item.id === 'SENTINEL2_SDB'));
