@@ -21,9 +21,7 @@ export function aoiToPolygon(aoi) {
     properties: {},
     geometry: {
       type: 'Polygon',
-      coordinates: [[
-        [minLon, minLat], [maxLon, minLat], [maxLon, maxLat], [minLon, maxLat], [minLon, minLat]
-      ]]
+      coordinates: [[[minLon, minLat], [maxLon, minLat], [maxLon, maxLat], [minLon, maxLat], [minLon, minLat]]]
     }
   };
 }
@@ -39,16 +37,9 @@ export function normalizeUtc(value, label) {
 export function buildEmodnetBathymetryUrl(aoi, resolution = BATHY_RES_DEG) {
   const { minLon, minLat, maxLon, maxLat } = aoi;
   const params = new URLSearchParams({
-    service: 'wcs',
-    version: '1.0.0',
-    request: 'getcoverage',
-    coverage: 'emodnet:mean',
-    crs: 'EPSG:4326',
-    BBOX: `${minLon},${minLat},${maxLon},${maxLat}`,
-    format: 'image/tiff',
-    interpolation: 'nearest',
-    resx: String(resolution),
-    resy: String(resolution)
+    service: 'wcs', version: '1.0.0', request: 'getcoverage', coverage: 'emodnet:mean', crs: 'EPSG:4326',
+    BBOX: `${minLon},${minLat},${maxLon},${maxLat}`, format: 'image/tiff', interpolation: 'nearest',
+    resx: String(resolution), resy: String(resolution)
   });
   return `https://ows.emodnet-bathymetry.eu/wcs?${params.toString()}`;
 }
@@ -73,54 +64,81 @@ function buildCopernicusJob(definition, request) {
     spatial_adequacy: adequacy,
     context_buffer_m: contextBufferM,
     subset: {
-      bbox: bboxFromAoi(sourceAoi),
-      target_aoi_bbox: [...request.bbox],
-      start_datetime: request.time.start,
-      end_datetime: request.time.end,
-      minimum_depth: request.depth_m.min,
-      maximum_depth: request.depth_m.max,
+      bbox: bboxFromAoi(sourceAoi), target_aoi_bbox: [...request.bbox], start_datetime: request.time.start,
+      end_datetime: request.time.end, minimum_depth: request.depth_m.min, maximum_depth: request.depth_m.max,
       polygons_file: ENVIRONMENT_PACKAGE_PLAN.aoi
     },
-    output: {
-      format: 'netcdf',
-      canonical_target: ENVIRONMENT_PACKAGE_PLAN.gridded
-    },
+    output: { format: 'netcdf', canonical_target: ENVIRONMENT_PACKAGE_PLAN.gridded },
     execution: 'BACKEND_REQUIRED',
     provenance: 'Copernicus Marine official 3D hourly Mediterranean analysis/forecast dataset',
     resolution_note: definition.resolutionNote
   };
 }
 
-function buildBathymetryJob(definition, request) {
-  const grid = estimateBathymetryCells(request.aoi);
-  const adequacy = resolutionAssessment(request.aoi, definition.nativeHorizontalResolutionM);
+function sanitizeHrPrimary(primary) {
+  if (!primary) return null;
   return {
-    id: 'emodnet-bathymetry',
+    id: primary.id ?? null,
+    name: primary.name ?? null,
+    coverage_ratio: Number.isFinite(primary.coverage_ratio) ? primary.coverage_ratio : null,
+    full_coverage: Boolean(primary.full_coverage),
+    native_horizontal_resolution_m: Number.isFinite(primary.native_horizontal_resolution_m) ? primary.native_horizontal_resolution_m : null,
+    download_url: primary.download_url ?? null,
+    metadata_url: primary.metadata_url ?? null,
+    bbox: primary.bbox ?? null
+  };
+}
+
+function buildBathymetryJob(definition, request, selection = null) {
+  const fallbackGrid = estimateBathymetryCells(request.aoi);
+  const fallbackUrl = buildEmodnetBathymetryUrl(request.aoi);
+  const useHr = selection?.selected_source === 'EMODNET_HR_DTM' && selection?.primary?.download_url;
+  const nativeResolution = useHr && Number.isFinite(selection.native_horizontal_resolution_m)
+    ? selection.native_horizontal_resolution_m
+    : definition.nativeHorizontalResolutionM;
+  const adequacy = resolutionAssessment(request.aoi, nativeResolution);
+
+  return {
+    id: useHr ? 'emodnet-hr-bathymetry' : 'emodnet-bathymetry',
     provider: definition.provider,
-    service: definition.service,
-    coverage: definition.coverage,
-    request_url: buildEmodnetBathymetryUrl(request.aoi),
+    source_selector: {
+      status: selection?.status ?? 'NOT_RUN',
+      selected_source: useHr ? 'EMODNET_HR_DTM' : 'EMODNET_STANDARD_DTM',
+      reason: selection?.reason ?? 'HR discovery not executed; standard DTM selected',
+      discovery: selection?.discovery ?? null,
+      hr_candidates: selection?.hr_candidates ?? 0,
+      primary_candidate: sanitizeHrPrimary(selection?.primary)
+    },
+    service: useHr ? 'DIRECT_HR_PRODUCT' : definition.service,
+    coverage: useHr ? null : definition.coverage,
+    request_url: useHr ? selection.primary.download_url : fallbackUrl,
+    fallback: {
+      provider: 'EMODnet Bathymetry', service: definition.service, coverage: definition.coverage,
+      request_url: fallbackUrl, native_horizontal_resolution_m: definition.nativeHorizontalResolutionM,
+      source_output: { format: 'geotiff', resolution_deg: BATHY_RES_DEG, estimated_grid: fallbackGrid }
+    },
     subset: { bbox: [...request.bbox] },
-    native_horizontal_resolution_m: definition.nativeHorizontalResolutionM,
+    native_horizontal_resolution_m: nativeResolution,
     spatial_adequacy: adequacy,
-    source_output: { format: 'geotiff', resolution_deg: BATHY_RES_DEG, estimated_grid: grid },
+    source_output: useHr
+      ? { format: 'provider-native', estimated_grid: null }
+      : { format: 'geotiff', resolution_deg: BATHY_RES_DEG, estimated_grid: fallbackGrid },
     normalization_target: { format: 'netcdf', file: ENVIRONMENT_PACKAGE_PLAN.gridded, variable: 'bathymetry' },
-    execution: 'PUBLIC_OGC',
-    provenance: 'EMODnet harmonised DTM; numeric coverage, separate from visual bathymetry layer',
-    resolution_note: definition.resolutionNote
+    execution: useHr ? 'DIRECT_HR_DOWNLOAD' : 'PUBLIC_OGC',
+    provenance: useHr
+      ? 'EMODnet High-Resolution DTM selected from hr_bathymetry_area footprint; standard harmonised DTM retained as fallback'
+      : 'EMODnet harmonised DTM selected as executable source; HR-DTM discovery state retained in source_selector',
+    resolution_note: useHr
+      ? 'HR-DTM resolution comes from current feature metadata when available; verify downloaded product metadata before acoustic use.'
+      : definition.resolutionNote
   };
 }
 
 function buildSubstrateJob(definition, request) {
   return {
-    id: 'emodnet-seabed-substrate',
-    provider: definition.provider,
-    service: definition.service,
-    endpoint: definition.endpoint,
-    capabilities_url: definition.capabilitiesUrl,
-    feature_type: null,
-    subset: { bbox: [...request.bbox], geometry: 'AOI polygon preferred' },
-    native_horizontal_resolution_m: null,
+    id: 'emodnet-seabed-substrate', provider: definition.provider, service: definition.service, endpoint: definition.endpoint,
+    capabilities_url: definition.capabilitiesUrl, feature_type: null,
+    subset: { bbox: [...request.bbox], geometry: 'AOI polygon preferred' }, native_horizontal_resolution_m: null,
     spatial_adequacy: { status: 'UNKNOWN', cellsAcrossMin: null, cellsAcrossMax: null },
     output: { format: 'geojson', canonical_target: ENVIRONMENT_PACKAGE_PLAN.seabedVector },
     execution: 'CAPABILITY_DISCOVERY_REQUIRED',
@@ -136,7 +154,8 @@ export function buildEnvironmentalRequest({
   minDepth = 0,
   maxDepth = 500,
   analysisGridM = 25,
-  variables = []
+  variables = [],
+  bathymetrySelection = null
 }) {
   aoiToPolygon(aoi);
   assertFinite(Number(minDepth), 'minDepth');
@@ -153,16 +172,14 @@ export function buildEnvironmentalRequest({
 
   const dimensions = aoiDimensionsMeters(aoi);
   const request = {
-    schema: 'environmental-data-request/0.2',
+    schema: 'environmental-data-request/0.3',
     created_at: new Date().toISOString(),
     region_profile: 'MEDITERRANEAN',
     aoi: { ...aoi },
     geometry: aoiToPolygon(aoi),
     bbox: bboxFromAoi(aoi),
     spatial_profile: {
-      width_m: dimensions.width,
-      height_m: dimensions.height,
-      area_m2: dimensions.area,
+      width_m: dimensions.width, height_m: dimensions.height, area_m2: dimensions.area,
       target_analysis_grid_m: Number(analysisGridM),
       note: 'Target analysis grid is a computational/resampling grid; it does not increase native source information.'
     },
@@ -172,26 +189,20 @@ export function buildEnvironmentalRequest({
     package_plan: { ...ENVIRONMENT_PACKAGE_PLAN },
     source_jobs: [],
     derived_products: [],
-    validation: {
-      environmental_state_real: false,
-      note: 'Request is source-resolved but not valid until source jobs have been executed and checked.'
-    }
+    validation: { environmental_state_real: false, note: 'Request is source-resolved but not valid until source jobs have been executed and checked.' }
   };
 
   for (const id of selected) {
     const definition = ENVIRONMENT_VARIABLES[id];
     if (definition.provider === 'Copernicus Marine') request.source_jobs.push(buildCopernicusJob(definition, request));
-    else if (id === 'bathymetry') request.source_jobs.push(buildBathymetryJob(definition, request));
+    else if (id === 'bathymetry') request.source_jobs.push(buildBathymetryJob(definition, request, bathymetrySelection));
     else if (id === 'seabed_substrate') request.source_jobs.push(buildSubstrateJob(definition, request));
   }
 
   if (selected.includes('temperature') && selected.includes('salinity')) {
     request.derived_products.push({
-      id: 'sound_speed',
-      label: 'Sound speed field / SSP',
-      inputs: ['temperature', 'salinity', 'depth'],
-      target: ENVIRONMENT_PACKAGE_PLAN.gridded,
-      status: 'PLANNED',
+      id: 'sound_speed', label: 'Sound speed field / SSP', inputs: ['temperature', 'salinity', 'depth'],
+      target: ENVIRONMENT_PACKAGE_PLAN.gridded, status: 'PLANNED',
       method: 'Approved seawater sound-speed formulation to be fixed in G2 before computation'
     });
   }
@@ -202,12 +213,9 @@ export function buildEnvironmentalRequest({
 export function buildCopernicusPython(request) {
   const jobs = request.source_jobs.filter(job => job.provider === 'Copernicus Marine');
   const lines = [
-    'import copernicusmarine',
-    '',
-    '# Generated by Underwater Mission Optimizer Data Broker.',
+    'import copernicusmarine', '', '# Generated by Underwater Mission Optimizer Data Broker.',
     '# Credentials are handled by the Copernicus Marine Toolbox environment, never embedded here.',
-    '# Coarse source grids may be fetched with context around the AOI; downstream processing clips/interpolates to the target AOI.',
-    ''
+    '# Coarse source grids may be fetched with context around the AOI; downstream processing clips/interpolates to the target AOI.', ''
   ];
   for (const job of jobs) {
     lines.push('copernicusmarine.subset(');
