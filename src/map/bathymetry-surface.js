@@ -49,17 +49,25 @@ function weightedDepth(candidates, tx, ty) {
   ];
   let weighted = 0;
   let weightSum = 0;
+  let missingWeight = 0;
   let valid = 0;
   let coastal = false;
   candidates.forEach((sample, index) => {
-    if (!sample || !Number.isFinite(sample.depth)) return;
     const weight = Math.max(1e-6, weights[index]);
+    if (!sample || !Number.isFinite(sample.depth)) {
+      missingWeight += weight;
+      return;
+    }
     weighted += sample.depth * weight;
     weightSum += weight;
     valid += 1;
     coastal = coastal || Boolean(sample.coastal_uncertain);
   });
   if (valid < 3 || weightSum <= 0) return null;
+  // With one missing corner, interpolate only where that unsupported corner has
+  // limited influence. This avoids painting a smooth-looking surface deep into
+  // land/no-data simply because three neighbouring water samples exist.
+  if (valid === 3 && missingWeight > 0.28) return null;
   return { depth: weighted / weightSum, support: valid, coastal };
 }
 
