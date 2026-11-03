@@ -31,7 +31,7 @@ test('coastal mask removes land-dominated cells and flags mixed cells', () => {
     alpha: new Uint8ClampedArray([
       255, 255, 0,
       255, 255, 0,
-      0,   0,   0
+      255, 255, 0
     ])
   };
   const grid = {
@@ -55,7 +55,7 @@ test('coastal mask removes land-dominated cells and flags mixed cells', () => {
   assert.ok(fraction >= 0 && fraction <= 1);
   const masked = applyWaterMaskToGrid(grid, mask, { minimumWaterFraction: 0.1, fullWaterFraction: 0.95 });
   assert.equal(masked.water_mask_applied, true);
-  assert.ok(masked.valid_cells < grid.valid_cells);
+  assert.equal(masked.valid_cells, 2);
   assert.ok(masked.cells.some(cell => cell.shallow_water));
-  assert.ok(masked.masked_land_cells >= 1);
+  assert.equal(masked.masked_land_cells, 1);
 });
