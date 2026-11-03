@@ -1,4 +1,4 @@
-import { BATHYMETRY, SEASCAPE_RASTER, emodnetWms, gebcoWms } from './config.js';
+import { BATHYMETRY, SEASCAPE_RASTER, emodnetWms } from './config.js';
 import { chartReliefExpression } from './depth-legend.js';
 
 const IDS = {
@@ -21,7 +21,7 @@ export class LayerManager {
   }
 
   setBathymetry(mode) {
-    this.bathyMode = mode;
+    this.bathyMode = BATHYMETRY[mode] ? mode : 'chart-relief';
     this.renderBathymetry();
   }
 
@@ -60,7 +60,8 @@ export class LayerManager {
       return;
     }
 
-    const tile = spec.provider === 'gebco' ? gebcoWms(spec.layer) : emodnetWms(spec.layer);
+    // EMODnet rainbow/multicolour are used as transparent sea overlays only.
+    const tile = emodnetWms(spec.layer);
     map.addSource(IDS.bathySource, { type: 'raster', tiles: [tile], tileSize: 256 });
     map.addLayer({
       id: IDS.bathyLayer,
