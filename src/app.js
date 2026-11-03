@@ -9,6 +9,7 @@ import { sampleAoiBathymetry } from './data/emodnet.js';
 import { DEFAULT_ENVIRONMENT_SELECTION, ENVIRONMENT_VARIABLES } from './data/source-registry.js';
 import { buildCopernicusPython, buildEnvironmentalRequest } from './data/environmental-request.js';
 import { buildWorldModelPackage } from './data/world-model-package.js';
+import { buildBathymetryDiscoveryPlan, summarizeBathymetryPlan } from './data/bathymetry-source-broker.js';
 import { downloadJson, downloadText } from './data/download.js';
 import { ASSETS, DEFAULT_WEIGHTS, optimize } from './optimizer/core.js';
 import { state, patchState } from './state.js';
@@ -18,7 +19,7 @@ root.innerHTML = `
 <div class="app">
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
-    <span class="badge">GitHub v0.18 Continuous Bathymetry + World Model Package</span>
+    <span class="badge">GitHub v0.19 Bathymetry Source Broker</span>
     <span class="badge">MapLibre z22</span>
     <span class="badge">Resolution-aware Data Broker</span>
   </header>
@@ -63,6 +64,17 @@ root.innerHTML = `
         <div id="bathySourceStatus" class="status">Bathymetry source: define an AOI for HR-DTM discovery.</div>
         <div class="field"><label>Mission</label><select id="mission"><option>ASW</option><option>MCM</option><option>REA</option></select></div>
         <div class="field"><label>Max operating depth (m)</label><input id="maxDepth" type="number" value="500" min="0"></div>
+      </div>
+
+
+      <div class="panel" id="bathyBrokerPanel">
+        <h2>Bathymetry Source Broker</h2>
+        <div id="bathyBrokerStatus" class="status">Define an AOI to build a best-available bathymetry strategy.</div>
+        <div id="bathyBrokerCandidates" class="source-candidates"></div>
+        <div class="request-actions">
+          <button id="downloadBathyPlan" class="btn" disabled>Bathymetry plan JSON</button>
+        </div>
+        <div class="data-note">The broker ranks sources by role, coverage, resolution, access and fitness. Regional inclusion never implies actual dataset coverage: discovery/coverage tests remain explicit gates.</div>
       </div>
 
       <div class="panel" id="environmentPanel">
@@ -162,6 +174,37 @@ function selectedEnvironmentVariables() {
   return [...document.querySelectorAll('#envVariables input:checked')].map(input => input.value);
 }
 
+function renderBathymetryBroker() {
+  const status = document.querySelector('#bathyBrokerStatus');
+  const list = document.querySelector('#bathyBrokerCandidates');
+  const button = document.querySelector('#downloadBathyPlan');
+  if (!state.aoi) {
+    patchState({ bathymetryDiscoveryPlan: null });
+    status.textContent = 'Define an AOI to build a best-available bathymetry strategy.';
+    status.className = 'status';
+    list.innerHTML = '';
+    button.disabled = true;
+    return;
+  }
+  const targetGridM = Number(document.querySelector('#analysisGridM')?.value) || 25;
+  const plan = buildBathymetryDiscoveryPlan(state.aoi, {
+    targetGridM,
+    estimatedMinDepthM: Number.isFinite(state.bathymetry?.min) ? state.bathymetry.min : null,
+    estimatedMaxDepthM: Number.isFinite(state.bathymetry?.max) ? state.bathymetry.max : null
+  });
+  patchState({ bathymetryDiscoveryPlan: plan });
+  const summary = summarizeBathymetryPlan(plan, 7);
+  const topPrimary = plan.recommended_strategy.primary_numeric_candidates[0] ?? 'NONE';
+  status.textContent = `BEST AVAILABLE PLAN · primary ${topPrimary} · ${plan.candidates.length} applicable/discovery candidates · ${plan.area_profile.micro_aoi ? 'micro-AOI' : 'regional AOI'}`;
+  status.className = 'status good';
+  list.innerHTML = summary.map((item, index) => {
+    const res = Number.isFinite(item.resolution_m) ? `~${formatMeters(item.resolution_m)}` : 'metadata/variable';
+    return `<div class="source-candidate ${item.use_class.toLowerCase()}"><b>${index + 1}. ${item.label}</b><span>${item.use_class} · ${item.applicability} · ${item.execution} · ${res}</span></div>`;
+  }).join('');
+  button.disabled = false;
+}
+
+
 function renderSpatialAdequacy() {
   const el = document.querySelector('#spatialAdequacy');
   if (!state.aoi) {
@@ -205,8 +248,9 @@ function updateAoiStatus(aoiValue) {
 }
 
 async function onAoiChanged(aoiValue) {
-  patchState({ aoi: aoiValue, bathymetry: null });
+  patchState({ aoi: aoiValue, bathymetry: null, bathymetryDiscoveryPlan: null });
   updateAoiStatus(aoiValue);
+  renderBathymetryBroker();
   updateLegend();
   invalidateEnvRequest(aoiValue ? 'AOI defined. Configure environmental request and build it.' : 'Select an AOI first.');
   if (!aoiValue) return;
@@ -219,6 +263,7 @@ async function onAoiChanged(aoiValue) {
   try {
     const bathymetry = await sampleAoiBathymetry(aoiValue);
     patchState({ bathymetry });
+    renderBathymetryBroker();
     status.textContent = `REAL EMODnet · ${bathymetry.samples}/9 · mean ${bathymetry.mean.toFixed(1)} m · σ ${bathymetry.sd.toFixed(1)} m`;
     status.className = 'status good';
     updateLegend();
@@ -244,8 +289,9 @@ document.querySelector('#clearAoi').addEventListener('click', () => {
   document.querySelector('#drawAoi').classList.remove('active');
   aoi.disable();
   aoi.clear();
-  patchState({ aoi: null, bathymetry: null });
+  patchState({ aoi: null, bathymetry: null, bathymetryDiscoveryPlan: null });
   updateAoiStatus(null);
+  renderBathymetryBroker();
   updateLegend();
   invalidateEnvRequest('Select an AOI first.');
   document.querySelector('#bathyStatus').textContent = 'Bathymetry will be sampled automatically after AOI selection.';
@@ -297,6 +343,11 @@ const invalidateOnEnvironmentalEdit = event => {
 };
 environmentPanel.addEventListener('input', invalidateOnEnvironmentalEdit);
 environmentPanel.addEventListener('change', invalidateOnEnvironmentalEdit);
+document.querySelector('#analysisGridM').addEventListener('change', renderBathymetryBroker);
+
+document.querySelector('#downloadBathyPlan').addEventListener('click', () => {
+  if (state.bathymetryDiscoveryPlan) downloadJson('bathymetry-source-plan.json', state.bathymetryDiscoveryPlan);
+});
 
 document.querySelector('#buildEnvRequest').addEventListener('click', () => {
   const status = document.querySelector('#envRequestStatus');
@@ -310,7 +361,8 @@ document.querySelector('#buildEnvRequest').addEventListener('click', () => {
       maxDepth: Number(document.querySelector('#envMaxDepth').value),
       analysisGridM: Number(document.querySelector('#analysisGridM').value),
       variables,
-      bathymetrySelection: state.bathymetrySource
+      bathymetrySelection: state.bathymetrySource,
+      bathymetryDiscoveryPlan: state.bathymetryDiscoveryPlan
     });
     const copernicus = currentEnvRequest.source_jobs.filter(job => job.provider === 'Copernicus Marine').length;
     const publicOgc = currentEnvRequest.source_jobs.filter(job => job.execution === 'PUBLIC_OGC').length;
@@ -385,4 +437,5 @@ document.querySelector('#optimize').addEventListener('click', () => {
 updateLegend();
 setRequestButtons(false);
 renderSpatialAdequacy();
+renderBathymetryBroker();
 window.__MSO__ = { map, layers, contours, aoi, state, updateLegend, fitToAoi, buildEnvironmentalRequest, buildWorldModelPackage, aoiDimensionsMeters, resolutionAssessment };
