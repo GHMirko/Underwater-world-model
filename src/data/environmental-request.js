@@ -129,6 +129,8 @@ function buildBathymetryJob(definition, request, selection = null, discoveryPlan
       native_horizontal_resolution_m: nativeResolution,
       spatial_adequacy: resolutionAssessment(request.aoi, nativeResolution),
       source_output: { format: 'netcdf-cf-or-geotiff', resolution_arcsec: 15 },
+      source_vertical_semantics: { quantity: 'elevation', units: 'm', positive: 'up', reference: 'approximately MSL; shallow-water inputs may be heterogeneous' },
+      normalization: { operation: 'depth_m = max(0, -elevation_m)', target_positive: 'down' },
       normalization_target: { format: 'netcdf', file: ENVIRONMENT_PACKAGE_PLAN.gridded, variable: 'bathymetry' },
       execution: 'SUBSET_DOWNLOAD_OR_OPENDAP',
       provenance: 'GEBCO 2026 global 15 arc-second terrain model selected as global fallback by the bathymetry source broker',
