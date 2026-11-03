@@ -75,8 +75,6 @@ export class AdaptiveContours {
     }
 
     // Source-matched rule: Seascape bathymetry uses Seascape contours only.
-    // Seascape serves a global z8 base and regional detail to deeper zooms,
-    // overzooming the nearest baked ancestor where no finer source exists.
     if (this.family === 'seascape') {
       this.abortController?.abort();
       this._clearVector();
@@ -99,6 +97,11 @@ export class AdaptiveContours {
       return;
     }
 
+    // Best-available rendering: mount WMS context immediately. WFS is an
+    // upgrade, not a prerequisite. This prevents blank contour states while
+    // vector requests are loading, aborted or blocked by a client network.
+    this._renderFallback();
+
     this.abortController?.abort();
     this.abortController = new AbortController();
     const bounds = this.map.getBounds();
@@ -108,7 +111,7 @@ export class AdaptiveContours {
       `https://ows.emodnet-bathymetry.eu/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=emodnet:contours&outputFormat=application/json&srsName=EPSG:4326&count=5000&bbox=${bbox},EPSG:4326`
     ];
 
-    this.onStatus('Loading source-matched EMODnet isobaths…');
+    this.onStatus('EMODnet context isobaths active · loading vector upgrade…');
     for (const url of urls) {
       try {
         const response = await fetch(url, { signal: this.abortController.signal, headers: { Accept: 'application/json' } });
@@ -117,12 +120,15 @@ export class AdaptiveContours {
         this._renderVector();
         return;
       } catch (error) {
+        // An abort can be caused by a newer refresh. Keep the already-mounted
+        // WMS rather than tearing the context layer down.
         if (error.name === 'AbortError') return;
       }
     }
 
-    this._renderFallback();
-    this.onStatus('Source-matched EMODnet isobaths · WFS unavailable, WMS fallback active');
+    // WMS is already mounted. State that explicitly rather than adding it only
+    // after all WFS attempts have failed.
+    this.onStatus('Source-matched EMODnet isobaths · WFS unavailable, WMS context active');
   }
 
   _renderDense() {
