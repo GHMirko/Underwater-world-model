@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { aoiToGeoJSON } from '../src/map/aoi-controller.js';
+import { BATHYMETRY, contourFamilyForBathymetry } from '../src/map/config.js';
 import { contourThreshold, filterContours } from '../src/map/contour-model.js';
 import { chartReliefExpression, legendModel } from '../src/map/depth-legend.js';
 import { aoiDimensionsMeters, expandAoiByMeters, recommendedZoomForAoi, resolutionAssessment } from '../src/map/spatial-scale.js';
@@ -66,6 +67,16 @@ test('chart relief elevation stops are strictly ascending', () => {
   const elevations = [];
   for (let i = 3; i < expression.length; i += 2) elevations.push(expression[i]);
   for (let i = 1; i < elevations.length; i += 1) assert.ok(elevations[i] > elevations[i - 1]);
+});
+
+test('viewer bathymetry modes are sea-only and contours are source matched', () => {
+  assert.deepEqual(Object.keys(BATHYMETRY), ['chart-relief', 'emodnet-rainbow', 'emodnet-multicolour', 'none']);
+  assert.equal(contourFamilyForBathymetry('chart-relief'), 'seascape');
+  assert.equal(contourFamilyForBathymetry('emodnet-rainbow'), 'emodnet');
+  assert.equal(contourFamilyForBathymetry('emodnet-multicolour'), 'emodnet');
+  assert.equal(contourFamilyForBathymetry('none'), 'none');
+  const expression = chartReliefExpression();
+  assert.equal(expression.at(-1), 'rgba(0,0,0,0)');
 });
 
 test('chart relief legend is quantitative and reports real AOI range', () => {
