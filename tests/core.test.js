@@ -69,8 +69,10 @@ test('chart relief elevation stops are strictly ascending', () => {
   for (let i = 1; i < elevations.length; i += 1) assert.ok(elevations[i] > elevations[i - 1]);
 });
 
-test('viewer bathymetry modes are sea-only and contours are source matched', () => {
-  assert.deepEqual(Object.keys(BATHYMETRY), ['chart-relief', 'emodnet-rainbow', 'emodnet-multicolour', 'none']);
+test('viewer bathymetry separates AOI numeric mode from context WMS and source-matches contours', () => {
+  assert.deepEqual(Object.keys(BATHYMETRY), ['aoi-adaptive', 'chart-relief', 'emodnet-rainbow', 'emodnet-multicolour', 'none']);
+  assert.equal(BATHYMETRY['aoi-adaptive'].numeric, true);
+  assert.equal(contourFamilyForBathymetry('aoi-adaptive'), 'none');
   assert.equal(contourFamilyForBathymetry('chart-relief'), 'seascape');
   assert.equal(contourFamilyForBathymetry('emodnet-rainbow'), 'emodnet');
   assert.equal(contourFamilyForBathymetry('emodnet-multicolour'), 'emodnet');
@@ -79,7 +81,16 @@ test('viewer bathymetry modes are sea-only and contours are source matched', () 
   assert.equal(expression.at(-1), 'rgba(0,0,0,0)');
 });
 
-test('chart relief legend is quantitative and reports real AOI range', () => {
+test('AOI adaptive legend uses real min-max as quantitative colour limits', () => {
+  const legend = legendModel('aoi-adaptive', { min: 3.4, max: 21.1 });
+  assert.equal(legend.quantitative, true);
+  assert.equal(legend.ticks[0], '3.4');
+  assert.equal(legend.ticks.at(-1), '21.1');
+  assert.match(legend.range, /3\.4–21\.1 m/);
+  assert.equal(legendModel('aoi-adaptive', null), null);
+});
+
+test('chart relief legend remains quantitative context and reports AOI reference range', () => {
   const legend = legendModel('chart-relief', { min: 42.2, max: 1180.8 });
   assert.equal(legend.quantitative, true);
   assert.equal(legend.ticks[0], '0');
