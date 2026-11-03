@@ -12,6 +12,7 @@
     "check": "npm run test && npm run build"
   },
   "dependencies": {
+    "geotiff": "^3.0.5",
     "maplibre-gl": "^5.10.0"
   },
   "devDependencies": {
