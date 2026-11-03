@@ -4,6 +4,7 @@ import { aoiToGeoJSON } from '../src/map/aoi-controller.js';
 import { BATHYMETRY, contourFamilyForBathymetry } from '../src/map/config.js';
 import { contourThreshold, filterContours } from '../src/map/contour-model.js';
 import { chartReliefExpression, legendModel } from '../src/map/depth-legend.js';
+import { assessBathymetryConfidence, buildAdaptiveContours, chooseContourScheme, contourSummary } from '../src/map/local-contours.js';
 import { aoiDimensionsMeters, expandAoiByMeters, recommendedZoomForAoi, resolutionAssessment } from '../src/map/spatial-scale.js';
 import { buildCopernicusPython, buildEmodnetBathymetryUrl, buildEnvironmentalRequest, estimateBathymetryCells } from '../src/data/environmental-request.js';
 import { ENVIRONMENT_VARIABLES } from '../src/data/source-registry.js';
@@ -95,6 +96,66 @@ test('chart relief legend remains quantitative context and reports AOI reference
   assert.equal(legend.quantitative, true);
   assert.equal(legend.ticks[0], '0');
   assert.match(legend.range, /42–1181 m/);
+});
+
+test('local contour scheme adapts to AOI depth range with bounded nice intervals', () => {
+  const shallow = chooseContourScheme(3.4, 21.1);
+  assert.ok(shallow.interval_m >= 1 && shallow.interval_m <= 5);
+  assert.ok(shallow.levels.length >= 3 && shallow.levels.length <= 12);
+  assert.ok(shallow.major_interval_m > shallow.interval_m);
+
+  const deep = chooseContourScheme(40, 620);
+  assert.ok(deep.interval_m >= 50);
+  assert.ok(deep.levels.length > 0);
+});
+
+test('bathymetry confidence degrades for coarse sparse micro-AOI data and preserves fitness-for-use caution', () => {
+  const quality = assessBathymetryConfidence({
+    aoiWidthM: 400,
+    aoiHeightM: 400,
+    nativeResolutionM: 115,
+    validSamples: 7,
+    totalSamples: 16,
+    sourceType: 'EMODNET_STANDARD_REST',
+    derivation: 'NUMERIC_GRID'
+  });
+  assert.ok(['MEDIUM', 'LOW'].includes(quality.confidence));
+  assert.ok(quality.coverage_ratio > 0.4 && quality.coverage_ratio < 0.5);
+  assert.ok(quality.estimated_horizontal_uncertainty_m > 50);
+  assert.match(quality.caution, /close-proximity/);
+});
+
+test('HR numeric bathymetry can reach high confidence without changing contour algorithm', () => {
+  const quality = assessBathymetryConfidence({
+    aoiWidthM: 400,
+    aoiHeightM: 400,
+    nativeResolutionM: 10,
+    validSamples: 64,
+    totalSamples: 64,
+    sourceType: 'EMODNET_HR_DTM',
+    derivation: 'NUMERIC_GRID'
+  });
+  assert.equal(quality.confidence, 'HIGH');
+  assert.ok(quality.fitness_for_use.includes('LOCAL_NAVIGATION_SUPPORT'));
+});
+
+test('marching squares derives contour features carrying provenance and confidence', () => {
+  const samples = [
+    { ix: 0, iy: 0, lon: 10.0, lat: 40.0, depth: 2 },
+    { ix: 1, iy: 0, lon: 10.1, lat: 40.0, depth: 8 },
+    { ix: 0, iy: 1, lon: 10.0, lat: 40.1, depth: 4 },
+    { ix: 1, iy: 1, lon: 10.1, lat: 40.1, depth: 10 }
+  ];
+  const scheme = { interval_m: 5, major_interval_m: 10, levels: [{ depth_m: 5, major: false }] };
+  const quality = { confidence: 'MEDIUM', confidence_score: 0.62, coverage_ratio: 1, estimated_horizontal_uncertainty_m: 57.5, fitness_for_use: ['MISSION_PLANNING'] };
+  const contours = buildAdaptiveContours({ samples, nx: 2, ny: 2, scheme, metadata: { source: 'test-grid', native_resolution_m: 115, ...quality } });
+  assert.ok(contours.features.length >= 1);
+  assert.equal(contours.features[0].properties.layer_class, 'DERIVED');
+  assert.equal(contours.features[0].properties.derivation, 'MARCHING_SQUARES_NUMERIC_GRID');
+  assert.equal(contours.features[0].properties.confidence, 'MEDIUM');
+  const summary = contourSummary(contours, scheme, quality);
+  assert.equal(summary.interval_m, 5);
+  assert.equal(summary.confidence, 'MEDIUM');
 });
 
 test('environment registry maps Mediterranean 3D hourly temperature salinity and currents', () => {
