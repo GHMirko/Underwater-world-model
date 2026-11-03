@@ -3,6 +3,8 @@ export const state = {
   aoi: null,
   bathymetry: null,
   bathymetrySource: null,
+  bathymetryGridSource: null,
+  bathymetryGrid: null,
   bathymetryQuality: null,
   adaptiveContours: null,
   baseMap: 'minimal',
