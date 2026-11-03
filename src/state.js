@@ -6,6 +6,7 @@ export const state = {
   bathymetryGridSource: null,
   bathymetryGrid: null,
   bathymetryQuality: null,
+  bathymetryDiscoveryPlan: null,
   adaptiveContours: null,
   baseMap: 'minimal',
   bathyMode: 'aoi-adaptive',
