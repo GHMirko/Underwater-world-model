@@ -232,7 +232,4 @@ map.on('idle', () => {
   }
 });
 
-const badge = document.querySelector('.header .badge');
-if (badge) badge.textContent = 'GitHub v0.19 Bathymetry Source Broker + Synthetic World Model';
-
 schedule(map, 150);
