@@ -41,6 +41,12 @@ export const BATHYMETRY = {
     provider: 'emodnet',
     contourFamily: 'emodnet'
   },
+  'gebco-global': {
+    name: 'GEBCO 2026 · global context WMS',
+    layer: 'GEBCO_Latest_2',
+    provider: 'gebco',
+    contourFamily: 'none'
+  },
   'emodnet-multicolour': {
     name: 'EMODnet Multicolour · context WMS',
     layer: 'emodnet:mean_multicolour',
@@ -63,6 +69,10 @@ export function visualBathymetryStack(mode) {
 
 export function emodnetWms(layer) {
   return `https://ows.emodnet-bathymetry.eu/wms?service=WMS&request=GetMap&version=1.1.1&layers=${encodeURIComponent(layer)}&styles=&format=image/png&transparent=true&tiled=false&width=256&height=256&srs=EPSG:3857&bbox={bbox-epsg-3857}`;
+}
+
+export function gebcoWms(layer = 'GEBCO_Latest_2') {
+  return `https://wms.gebco.net/mapserv?service=WMS&request=GetMap&version=1.1.1&layers=${encodeURIComponent(layer)}&styles=&format=image/png&transparent=true&width=256&height=256&srs=EPSG:3857&bbox={bbox-epsg-3857}`;
 }
 
 export function emodnetHrBathymetryDiscoveryWfs(aoi) {
