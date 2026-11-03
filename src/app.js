@@ -385,7 +385,7 @@ document.querySelector('#buildEnvRequest').addEventListener('click', () => {
     status.textContent = `SOURCE-RESOLVED · ${variables.length} variables · ${currentEnvRequest.source_jobs.length} jobs · Copernicus ${copernicus} backend · HR bathy ${directHr}${publicOgc ? ` · public OGC ${publicOgc}` : ''}${discovery ? ` · discovery ${discovery}` : ''}${unresolved || coarse ? ` · spatial: ${unresolved} unresolved / ${coarse} coarse` : ''}`;
     status.className = unresolved ? 'status warn' : 'status good';
     setRequestButtons(true);
-    const bathyJob = currentEnvRequest.source_jobs.find(job => job.id === 'emodnet-bathymetry' || job.id === 'emodnet-hr-bathymetry');
+    const bathyJob = currentEnvRequest.source_jobs.find(job => ['emodnet-bathymetry', 'emodnet-hr-bathymetry', 'gebco-2026-bathymetry'].includes(job.id));
     const bathyLink = document.querySelector('#openBathymetry');
     if (bathyJob) {
       bathyLink.href = bathyJob.request_url;
