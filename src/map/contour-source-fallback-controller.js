@@ -1,4 +1,5 @@
 import { state, subscribeState } from '../state.js';
+import { contourDisplayAssessment } from './contour-quality.js';
 
 function waitForApp() {
   return new Promise(resolve => {
@@ -16,13 +17,33 @@ function statusElement() {
 
 function localSummaryText(summary) {
   if (!summary?.feature_count) return null;
-  return `Adaptive isobaths · ${summary.interval_m} m interval · ${summary.levels_m.length} levels · confidence ${summary.confidence} · coverage ${(summary.coverage_ratio * 100).toFixed(0)}%`;
+  const quality = contourDisplayAssessment(summary);
+  return `Adaptive isobaths · ${summary.interval_m} m interval · ${summary.levels_m.length} levels · confidence ${summary.confidence} · coverage ${(summary.coverage_ratio * 100).toFixed(0)}% · ${quality.ready ? 'LOCAL ACCEPTED' : 'LOCAL INSUFFICIENT'}`;
 }
 
 const app = await waitForApp();
 const contourEngine = app.contours;
+const map = app.map;
 const originalStatus = contourEngine.onStatus;
 let contextFallback = false;
+let ensureTimer = null;
+
+function contextLayerMounted() {
+  return Boolean(map.getLayer('adaptive-contours-line') || map.getLayer('contours-fallback-layer'));
+}
+
+function scheduleContextEnsure(attempt = 0) {
+  clearTimeout(ensureTimer);
+  if (!contextFallback || attempt > 8) return;
+  ensureTimer = setTimeout(() => {
+    if (!contextFallback) return;
+    if (contextLayerMounted()) return;
+    if (contourEngine.bathymetryMode !== 'emodnet-rainbow') contourEngine.setBathymetryMode('emodnet-rainbow');
+    contourEngine.setVisible(true);
+    contourEngine.refresh();
+    scheduleContextEnsure(attempt + 1);
+  }, 80 + attempt * 90);
+}
 
 contourEngine.onStatus = message => {
   if (!contextFallback) {
@@ -30,19 +51,22 @@ contourEngine.onStatus = message => {
     return;
   }
   const phase = state.aoi
-    ? 'local derived contour unavailable'
+    ? 'local derived contour unavailable or below quality gate'
     : 'waiting for local AOI bathymetry';
   originalStatus(`CONTEXT ONLY · ${phase} · ${message}`);
+  scheduleContextEnsure();
 };
 
 function applyContourSourcePolicy() {
   if (state.bathyMode !== 'aoi-adaptive') {
     contextFallback = false;
+    clearTimeout(ensureTimer);
     return;
   }
 
   if (!state.contours) {
     contextFallback = false;
+    clearTimeout(ensureTimer);
     if (contourEngine.visible) contourEngine.setVisible(false);
     const status = statusElement();
     if (status) status.textContent = 'Adaptive isobaths off';
@@ -50,10 +74,12 @@ function applyContourSourcePolicy() {
   }
 
   const summary = state.adaptiveContours;
-  const localReady = Boolean(summary?.feature_count > 0);
+  const assessment = contourDisplayAssessment(summary);
+  const localReady = Boolean(summary?.feature_count > 0 && assessment.ready);
 
   if (localReady) {
     contextFallback = false;
+    clearTimeout(ensureTimer);
     if (contourEngine.visible) contourEngine.setVisible(false);
     const status = statusElement();
     if (status) {
@@ -63,19 +89,18 @@ function applyContourSourcePolicy() {
     return;
   }
 
-  // Best-available-information policy: before a numeric AOI exists, or when
-  // the local grid cannot yet produce a trustworthy crossing, keep the
-  // authoritative EMODnet contour service visible as context. It is never
-  // promoted to the local analytical World Model layer.
   contextFallback = true;
-  contourEngine.setBathymetryMode('emodnet-rainbow');
+  if (contourEngine.bathymetryMode !== 'emodnet-rainbow') contourEngine.setBathymetryMode('emodnet-rainbow');
   contourEngine.setDensity(state.contourDensity);
   contourEngine.setVisible(true);
+  scheduleContextEnsure();
 
   const status = statusElement();
   if (status) {
     const reason = state.aoi
-      ? `local numeric grid produced no contour crossing${summary?.confidence ? ` · local confidence ${summary.confidence}` : ''}`
+      ? summary?.feature_count
+        ? `local evidence insufficient · ${assessment.reason}`
+        : `local numeric grid produced no contour crossing${summary?.confidence ? ` · local confidence ${summary.confidence}` : ''}`
       : 'waiting for local AOI bathymetry';
     status.textContent = `CONTEXT ONLY · EMODnet isobaths · ${reason}`;
     status.className = 'status warn';
@@ -91,14 +116,15 @@ subscribeState((next, patch) => {
     Object.prototype.hasOwnProperty.call(patch, 'contourDensity') ||
     Object.prototype.hasOwnProperty.call(patch, 'baseMap')
   ) {
-    // Run after the primary cartography controller has reacted to the same
-    // state patch. This controller only arbitrates which contour source is
-    // visible; it does not own the World Model data.
     setTimeout(applyContourSourcePolicy, 0);
   }
 });
 
+map.on('style.load', () => {
+  if (contextFallback) scheduleContextEnsure();
+});
+
 const badge = document.querySelector('.header .badge');
-if (badge) badge.textContent = 'GitHub v0.16 Confidence-Aware Contours · v0.16.1';
+if (badge) badge.textContent = 'GitHub v0.16 Confidence-Aware Contours · v0.16.2';
 
 applyContourSourcePolicy();
