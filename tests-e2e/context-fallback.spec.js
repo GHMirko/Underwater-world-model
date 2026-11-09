@@ -23,7 +23,7 @@ async function drawAoi(page) {
 }
 
 test('AOI adaptive mode keeps EMODnet context isobaths before AOI and when local crossing is unavailable', async ({ page }) => {
-  await expect(page.locator('.header .badge').first()).toContainText('v0.22');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.23');
   await expect(page.locator('#bathyMode')).toHaveValue('aoi-adaptive');
   await expect(page.locator('#contours')).toBeChecked();
   await expect(page.locator('#contourStatus')).toContainText('CONTEXT ONLY');
