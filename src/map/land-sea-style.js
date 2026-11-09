@@ -61,6 +61,7 @@ export function independentMapStyle(baseKey = 'minimal') {
     source: SEA_COASTLINE_SOURCE_ID,
     'source-layer': 'water',
     filter: ['in', ['get', 'class'], ['literal', WATER_CLASSES]],
+    layout: { visibility: 'none' }, // enabled only after provider availability is verified
     paint: { 'fill-color': '#f8fcff', 'fill-opacity': 1 }
   });
   return { version: 8, sources, layers };
@@ -70,10 +71,7 @@ export function switchLandBasemap(map, baseKey) {
   const selected = Object.hasOwn(LAND_LAYER_IDS, baseKey) ? baseKey : 'minimal';
   // Only change visibility of land-specific layers. No setStyle, addSource,
   // removeSource, marine layer rebuild, state mutation, camera reset or I/O.
-  // Call after style is loaded; changes queued before load are not needed
-  // because initial style already contains selected land source.
-  if (!map.isStyleLoaded()) return false;
-
+  // The layers can be toggled even while raster tiles are loading.
   for (const [key, id] of Object.entries(LAND_LAYER_IDS)) {
     if (!map.getLayer(id)) return false;
   }
