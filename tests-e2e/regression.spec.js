@@ -32,7 +32,7 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await expect(page.locator('.header .badge').first()).toContainText('v0.22');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.23');
   await expect(page.locator('#baseMap option')).toHaveCount(2);
   await expect(page.locator('#baseMap')).toContainText('Minimal');
   await expect(page.locator('#baseMap')).toContainText('Satellite');
@@ -58,8 +58,8 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   await expect(page.locator('#fitAoi')).toBeEnabled();
   await expect(page.locator('#bathyStatus')).toContainText('REAL EMODnet');
   await expect(page.locator('#aoiDepthGridStatus')).toContainText('confidence');
-  // Beyond the native bathymetric display cap the legend is intentionally hidden.
-  await expect(page.locator('#depthLegend')).toBeHidden();
+  // Visual overzoom must not hide the depth legend.
+  await expect(page.locator('#depthLegend')).toBeVisible();
   await expect(page.locator('#depthLegend')).toContainText('AOI REAL bathymetry');
   await expect(page.locator('#contourStatus')).toContainText('Adaptive isobaths');
   await expect(page.locator('#contourStatus')).toContainText('confidence');
@@ -172,26 +172,26 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
 });
 
 
-test('v0.20 keeps micro-AOI geographic zoom but caps bathymetry rendering to source resolution', async ({ page }) => {
+test('v0.23 keeps isobaths and bathymetry available under visual overzoom, with a clear warning', async ({ page }) => {
   await page.evaluate(() => window.__MSO__.map.setZoom(17));
   await drawAoi(page, { x: 150, y: 130 }, { x: 550, y: 530 });
   await expect(page.locator('#bathymetryDetailLimit')).toBeVisible();
-  await expect(page.locator('#bathymetryDetailLimit')).toContainText('Limite dettaglio batimetrico');
+  await expect(page.locator('#bathymetryDetailLimit')).toContainText('Sovrascala batimetrica');
   const state = await page.evaluate(() => {
     const map = window.__MSO__.map;
     return {
       geographicZoom: map.getZoom(),
       derivedContourMaxZoom: map.getLayer('aoi-derived-contours-layer')?.maxzoom ?? null,
-      bodyLimited: document.body.classList.contains('bathymetry-detail-limited'),
+      bodyLimited: document.body.classList.contains('bathymetry-coarse-view'),
       aoiSelected: Boolean(window.__MSO__.state.aoi)
     };
   });
   expect(state.geographicZoom).toBeGreaterThan(16);
-  expect(state.derivedContourMaxZoom).toBeLessThan(state.geographicZoom);
+  expect(state.derivedContourMaxZoom ?? 24).toBeGreaterThan(state.geographicZoom);
   expect(state.bodyLimited).toBe(true);
   expect(state.aoiSelected).toBe(true);
   await page.evaluate(() => window.__MSO__.map.setZoom(10));
-  await expect(page.locator('body')).not.toHaveClass(/bathymetry-detail-limited/);
+  await expect(page.locator('body')).not.toHaveClass(/bathymetry-coarse-view/);
 });
 
 
@@ -294,4 +294,28 @@ test('v0.22 renders sea context without AOI and does not reset it on land switch
   expect(after.oceanFill).toBe('#b9d8eb');
   expect(after.mainBathy).toBe(false);
   expect(after.landMode).toBe('visible');
+});
+
+
+test('v0.23 GEBCO context WMS remains mounted beyond native scale and labels isobaths as different-source context', async ({ page }) => {
+  await page.locator('#bathyMode').selectOption('gebco-global');
+  await expect.poll(async () => page.evaluate(() =>
+    Boolean(window.__MSO__.map.getLayer('bathymetry-layer'))
+  ), { timeout: 10000 }).toBe(true);
+  await expect(page.locator('#contourStatus')).toContainText('DIFFERENT SOURCE from GEBCO');
+  await page.evaluate(() => window.__MSO__.map.setZoom(17));
+  await expect(page.locator('#bathymetryDetailLimit')).toContainText('Sovrascala batimetrica');
+  const current = await page.evaluate(() => {
+    const map = window.__MSO__.map;
+    return {
+      rasterPresent: Boolean(map.getLayer('bathymetry-layer')),
+      rasterMaxZoom: map.getLayer('bathymetry-layer')?.maxzoom ?? 24,
+      rasterSourceMaxZoom: map.getSource('bathymetry-source')?.maxzoom ?? null,
+      contoursPresent: Boolean(map.getLayer('contours-fallback-layer') || map.getLayer('adaptive-contours-line'))
+    };
+  });
+  expect(current.rasterPresent).toBe(true);
+  expect(current.rasterMaxZoom).toBeGreaterThan(17);
+  expect(current.rasterSourceMaxZoom).toBe(11);
+  expect(current.contoursPresent).toBe(true);
 });
