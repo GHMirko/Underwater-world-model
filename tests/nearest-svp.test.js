@@ -89,7 +89,7 @@ test('Bellhop environment manifest carries selected cast and blocks TL until phy
   assert.equal(manifest.nearest_svp.selected_cast.id, 'cast-1');
   assert.equal(manifest.svp_forecast_adaptation.bellhop_run, 'NOT_RUN');
   assert.ok(manifest.readiness.blocking_gates.includes('VALIDATE_NEAREST_MEASURED_SVP_AND_APPLICABILITY_TO_DOMAIN'));
-  assert.equal(manifest.time.simulation_snapshots[0], time);
+  assert.equal(Date.parse(manifest.time.simulation_snapshots[0]), Date.parse(time));
   assert.equal(manifest.readiness.status, 'NOT_READY');
 });
 
