@@ -131,7 +131,7 @@ export function buildBellhop3dEnvironmentInventory({
   const inventory = ACOUSTIC_ENVIRONMENT_INPUTS.map(def => {
     const job = EXTRACTED_IDS.includes(def.id) ? jobById(environmentalRequest, def.id) : null;
     let acquisitionStatus = job ? 'SOURCE_JOB_PLANNED' : 'INPUT_OR_DERIVATION_REQUIRED';
-    if (job?.execution === 'REGIONAL_SOURCE_NOT_APPLICABLE' || job?.spatial_adequacy?.status === 'UNRESOLVED') acquisitionStatus = 'SOURCE_UNRESOLVED';
+    if (job?.execution === 'REGIONAL_SOURCE_NOT_APPLICABLE') acquisitionStatus = 'SOURCE_UNRESOLVED';
     return {
       ...def,
       acquisition_status: acquisitionStatus,
@@ -149,8 +149,10 @@ export function buildBellhop3dEnvironmentInventory({
 
   const allJobsPlanned = environmentalRequest.source_jobs.length;
   const unresolvedJobs = environmentalRequest.source_jobs.filter(job =>
-    job.execution === 'REGIONAL_SOURCE_NOT_APPLICABLE' ||
-    job.spatial_adequacy?.status === 'UNRESOLVED'
+    job.execution === 'REGIONAL_SOURCE_NOT_APPLICABLE'
+  ).map(job => job.id);
+  const spatialResolutionGaps = environmentalRequest.source_jobs.filter(job =>
+    ['COARSE', 'UNRESOLVED'].includes(job.spatial_adequacy?.status)
   ).map(job => job.id);
 
   return {
@@ -187,6 +189,7 @@ export function buildBellhop3dEnvironmentInventory({
       status: 'NOT_READY',
       requested_source_jobs: allJobsPlanned,
       unresolved_source_jobs: unresolvedJobs,
+      spatial_resolution_gaps: spatialResolutionGaps,
       required_model_inputs: REQUIRED_IDS,
       completed_and_validated_inputs: [],
       blocking_gates: [
