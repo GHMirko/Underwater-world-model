@@ -32,7 +32,7 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await expect(page.locator('.header .badge').first()).toContainText('v0.23');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.24');
   await expect(page.locator('#baseMap option')).toHaveCount(2);
   await expect(page.locator('#baseMap')).toContainText('Minimal');
   await expect(page.locator('#baseMap')).toContainText('Satellite');
@@ -318,4 +318,78 @@ test('v0.23 GEBCO context WMS remains mounted beyond native scale and labels iso
   expect(current.rasterMaxZoom).toBeGreaterThan(17);
   expect(current.rasterSourceMaxZoom).toBe(11);
   expect(current.contoursPresent).toBe(true);
+});
+
+
+test('v0.24 exposes all Bellhop3D environment inputs but does not claim TL run readiness', async ({ page }) => {
+  await expect(page.locator('#acousticEnvironmentPanel')).toBeVisible();
+  await page.locator('#buildAcousticInventory').click();
+  await expect(page.locator('#bellhopInventoryStatus')).toContainText('Define an AOI');
+
+  await drawAoi(page);
+  await page.locator('#bellhopBufferM').fill('5000');
+  await page.locator('#buildAcousticInventory').click();
+  await expect(page.locator('#bellhopInventoryStatus')).toContainText('NOT READY / NO TL RUN');
+  await expect(page.locator('#bellhopInventoryRows .source-candidate')).toHaveCount(12);
+  await expect(page.locator('#downloadBellhopInventory')).toBeEnabled();
+
+  const manifest = await page.evaluate(() => window.__MSO__.getAcousticInventory());
+  expect(manifest.schema).toBe('bellhop3d-environment-inventory/0.1');
+  expect(manifest.readiness.status).toBe('NOT_READY');
+  expect(manifest.readiness.completed_and_validated_inputs).toHaveLength(0);
+  expect(manifest.environmental_request.source_jobs).toHaveLength(7);
+  expect(manifest.propagation_domain.buffer_m).toBe(5000);
+  expect(manifest.derived_workflow.find(item => item.id === 'transmission_loss').status).toBe('NOT_RUN');
+  expect(manifest.scenario_inputs_pending.length).toBeGreaterThan(5);
+
+  await page.locator('#bellhopBufferM').fill('10000');
+  await expect(page.locator('#downloadBellhopInventory')).toBeDisabled();
+  await page.locator('#buildAcousticInventory').click();
+  await expect(page.locator('#downloadBellhopInventory')).toBeEnabled();
+});
+
+
+test('v0.24 nearest measured SVP selection is based on AOI, depth and time with no fabricated TL', async ({ page }) => {
+  await drawAoi(page);
+  const parameters = await page.evaluate(() => {
+    const aoi = window.__MSO__.state.aoi;
+    return {
+      latitude: (aoi.minLat + aoi.maxLat) / 2,
+      longitude: (aoi.minLon + aoi.maxLon) / 2,
+      snapshot: document.querySelector('#svpSimulationTime').value + 'Z'
+    };
+  });
+  await page.locator('#svpRequiredDepth').fill('100');
+  const casts = {
+    schema: 'svp-candidates/0.1',
+    profiles: [
+      {
+        id: 'far-cast', source: 'local measured CTD',
+        latitude: parameters.latitude + 0.08, longitude: parameters.longitude + 0.1,
+        observed_at: parameters.snapshot,
+        samples: [{ depth_m: 0, sound_speed_m_s: 1510 }, { depth_m: 50, sound_speed_m_s: 1507 }, { depth_m: 105, sound_speed_m_s: 1503 }]
+      },
+      {
+        id: 'nearest-cast', source: 'local measured CTD',
+        latitude: parameters.latitude, longitude: parameters.longitude,
+        observed_at: parameters.snapshot,
+        samples: [{ depth_m: 0, sound_speed_m_s: 1512 }, { depth_m: 50, sound_speed_m_s: 1508 }, { depth_m: 105, sound_speed_m_s: 1504 }]
+      }
+    ]
+  };
+  await page.locator('#svpCandidatesFile').setInputFiles({
+    name: 'measured-casts.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(casts), 'utf-8')
+  });
+  await expect(page.locator('#svpCandidatesStatus')).toContainText('2 observed SVP candidate(s)');
+  await page.locator('#buildAcousticInventory').click();
+  await expect(page.locator('#svpSelectionStatus')).toContainText('nearest-cast');
+  const manifest = await page.evaluate(() => window.__MSO__.getAcousticInventory());
+  expect(manifest.nearest_svp.selected_cast.id).toBe('nearest-cast');
+  expect(manifest.nearest_svp.selected_cast.distance_km).toBeLessThan(0.1);
+  expect(manifest.svp_forecast_adaptation.transmission_loss).toBe('NOT_COMPUTED');
+  expect(manifest.svp_forecast_adaptation.detection_range).toBe('UNDEFINED_WITHOUT_SENSOR_AND_DETECTION_CRITERION');
+  expect(manifest.readiness.status).toBe('NOT_READY');
+  await expect(page.locator('#downloadBellhopInventory')).toBeEnabled();
 });
