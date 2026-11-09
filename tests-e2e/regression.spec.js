@@ -32,7 +32,7 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await expect(page.locator('.header .badge').first()).toContainText('v0.19');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.21');
   await expect(page.locator('#baseMap option')).toHaveCount(2);
   await expect(page.locator('#baseMap')).toContainText('Minimal');
   await expect(page.locator('#baseMap')).toContainText('Satellite');
@@ -186,4 +186,65 @@ test('v0.20 keeps micro-AOI geographic zoom but caps bathymetry rendering to sou
   expect(state.aoiSelected).toBe(true);
   await page.evaluate(() => window.__MSO__.map.setZoom(10));
   await expect(page.locator('body')).not.toHaveClass(/bathymetry-detail-limited/);
+});
+
+
+test('v0.21 land style switch preserves the marine stack, AOI and numeric data', async ({ page }) => {
+  await page.locator('#bathyMode').selectOption('emodnet-rainbow');
+  await page.waitForTimeout(350);
+  const before = await page.evaluate(() => {
+    const { map, state } = window.__MSO__;
+    window.__landSeaProbe = {
+      styleLoads: 0,
+      marineSource: map.getSource('bathymetry-source'),
+      seaMaskSource: map.getSource('sea-coastline-vectors'),
+      bathyLayer: map.getLayer('bathymetry-layer'),
+      marineMode: state.bathyMode,
+      marineOpacity: map.getPaintProperty('bathymetry-layer', 'raster-opacity'),
+      geography: [map.getCenter().lng, map.getCenter().lat, map.getZoom()],
+      onStyleLoad: () => window.__landSeaProbe.styleLoads++
+    };
+    map.on('style.load', window.__landSeaProbe.onStyleLoad);
+    return {
+      seaMask: Boolean(window.__landSeaProbe.seaMaskSource),
+      landMinimal: map.getLayoutProperty('land-basemap-minimal', 'visibility'),
+      landSatellite: map.getLayoutProperty('land-basemap-satellite', 'visibility')
+    };
+  });
+  expect(before.seaMask).toBe(true);
+  expect(before.landMinimal).toBe('visible');
+  expect(before.landSatellite).toBe('none');
+
+  await page.locator('#baseMap').selectOption('satellite');
+  await expect.poll(async () => page.evaluate(() => window.__MSO__.map.getLayoutProperty('land-basemap-satellite', 'visibility'))).toBe('visible');
+
+  const after = await page.evaluate(() => {
+    const { map, state } = window.__MSO__;
+    const probe = window.__landSeaProbe;
+    map.off('style.load', probe.onStyleLoad);
+    return {
+      styleLoads: probe.styleLoads,
+      marineSourceSame: map.getSource('bathymetry-source') === probe.marineSource,
+      bathyLayerSame: map.getLayer('bathymetry-layer') === probe.bathyLayer,
+      seaMaskSourceSame: map.getSource('sea-coastline-vectors') === probe.seaMaskSource,
+      marineModeSame: state.bathyMode === probe.marineMode,
+      marineOpacitySame: map.getPaintProperty('bathymetry-layer', 'raster-opacity') === probe.marineOpacity,
+      geography: [map.getCenter().lng, map.getCenter().lat, map.getZoom()],
+      previousGeography: probe.geography,
+      landMinimal: map.getLayoutProperty('land-basemap-minimal', 'visibility'),
+      landSatellite: map.getLayoutProperty('land-basemap-satellite', 'visibility')
+    };
+  });
+  expect(after.styleLoads).toBe(0);
+  expect(after.marineSourceSame).toBe(true);
+  expect(after.bathyLayerSame).toBe(true);
+  expect(after.seaMaskSourceSame).toBe(true);
+  expect(after.marineModeSame).toBe(true);
+  expect(after.marineOpacitySame).toBe(true);
+  expect(after.landMinimal).toBe('none');
+  expect(after.landSatellite).toBe('visible');
+  expect(after.geography[2]).toBeCloseTo(after.previousGeography[2], 4);
+
+  await page.locator('#baseMap').selectOption('minimal');
+  await expect.poll(async () => page.evaluate(() => window.__MSO__.map.getLayoutProperty('land-basemap-minimal', 'visibility'))).toBe('visible');
 });
