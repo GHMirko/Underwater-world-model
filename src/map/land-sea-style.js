@@ -18,7 +18,8 @@ export const LAND_LAYER_IDS = Object.freeze({
 export const SEA_BACKGROUND_LAYER_ID = 'sea-water-background';
 export const SEA_COASTLINE_SOURCE_ID = 'sea-coastline-vectors';
 
-const COASTLINE_TILEJSON = 'https://tiles.openfreemap.org/planet';
+// Direct vector tile URL avoids blocking the map style on TileJSON discovery.
+const COASTLINE_TILE_URL = 'https://tiles.openfreemap.org/planet/latest/{z}/{x}/{y}.pbf';
 const WATER_CLASSES = ['ocean', 'dock'];
 
 export function independentMapStyle(baseKey = 'minimal') {
@@ -49,7 +50,9 @@ export function independentMapStyle(baseKey = 'minimal') {
   // through semi-transparent sea overlays.
   sources[SEA_COASTLINE_SOURCE_ID] = {
     type: 'vector',
-    url: COASTLINE_TILEJSON,
+    tiles: [COASTLINE_TILE_URL],
+    minzoom: 0,
+    maxzoom: 14,
     attribution: '© OpenStreetMap contributors · OpenMapTiles · OpenFreeMap'
   };
   layers.push({
