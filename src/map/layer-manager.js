@@ -76,7 +76,10 @@ export class LayerManager {
 
   renderBathymetry() {
     const map = this.map;
-    if (!map.isStyleLoaded()) return false;
+    // isStyleLoaded() becomes false while ANY remote tile is loading.
+    // That is not a reason to block adding/removing already mounted style
+    // layers. The base layer proves that the style graph exists.
+    if (!map.getLayer('background')) return false;
 
     const stack = visualBathymetryStack(this.bathyMode);
     const primaryExpected = Boolean(BATHYMETRY[this.bathyMode]?.layer);
@@ -156,7 +159,7 @@ export class LayerManager {
     this._restoreTimers.clear();
 
     const tryRestore = attempt => {
-      if (this.map.isStyleLoaded()) {
+      if (this.map.getLayer('background')) {
         try {
           this.renderBathymetry();
           return;
