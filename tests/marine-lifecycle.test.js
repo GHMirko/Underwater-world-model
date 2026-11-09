@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { LayerManager } from '../src/map/layer-manager.js';
 
 function fakeMap() {
-  const sources = new Map(), layers = new Map();
+  const sources = new Map(), layers = new Map([['background', { id: 'background' }]]);
   const events = new Map();
   let sourceCreates = 0, layerCreates = 0;
   return {
