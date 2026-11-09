@@ -13,6 +13,7 @@ test('land and sea presentation have separate permanent sources and layers', () 
   assert.equal(style.layers[3].id, SEA_BACKGROUND_LAYER_ID);
   assert.equal(style.sources[SEA_COASTLINE_SOURCE_ID].type, 'vector');
   assert.equal(style.layers[3]['source-layer'], 'water');
+  assert.equal(style.layers[3].layout.visibility, 'none', 'unavailable external coastline must never block the map');
   assert.equal(style.layers[1].layout.visibility, 'visible');
   assert.equal(style.layers[2].layout.visibility, 'none');
   assert.equal(independentMapStyle('satellite').layers[2].layout.visibility, 'visible');
@@ -55,9 +56,10 @@ test('unknown land selection degrades to minimal without touching marine data', 
   assert.equal(style.layers[2].layout.visibility, 'none');
 });
 
-test('land switching before style load does not change marine renderer', () => {
+test('land switching before the land layers are mounted does not change marine renderer', () => {
   const map = {
     isStyleLoaded: () => false,
+    getLayer: () => null,
     setStyle: () => { throw new Error('should not reset style'); }
   };
   assert.equal(switchLandBasemap(map, 'satellite'), false);
