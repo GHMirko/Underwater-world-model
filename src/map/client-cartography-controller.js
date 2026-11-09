@@ -324,7 +324,6 @@ if (opacitySlider) opacitySlider.addEventListener('input', () => syncLayerAppear
 
 subscribeState((next, patch) => {
   if (Object.prototype.hasOwnProperty.call(patch, 'aoi')) { if (!next.aoi) clear(map, status); else loadAoiGrid(map, next.aoi, status); }
-  if (Object.prototype.hasOwnProperty.call(patch, 'baseMap')) scheduleRender(map);
   if (Object.prototype.hasOwnProperty.call(patch, 'bathyMode')) { syncContourUi(app); scheduleRender(map); renderLegend(); }
   if (Object.prototype.hasOwnProperty.call(patch, 'debugBathymetryGrid')) scheduleRender(map);
   if (Object.prototype.hasOwnProperty.call(patch, 'contours') || Object.prototype.hasOwnProperty.call(patch, 'contourDensity')) {
