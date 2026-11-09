@@ -1,14 +1,13 @@
 /**
- * Prevent low-resolution bathymetry from looking like micro-survey data.
- * Preserve high-zoom navigation and land basemap; restrict ONLY bathymetry layers.
- * MapLibre layer maxzoom is independent of visibility toggles set by other controllers.
+ * Display a warning when zoom exceeds source detail; never hide layers.
+ * Source fidelity and requested map scale are independent dimensions.
  */
 import { state, subscribeState } from '../state.js';
 import { bathymetryDisplayPolicy } from './bathymetry-detail-policy.js';
 
 // Zoom beyond native grid resolution is visual overzoom, not missing data.
- // Never alter MapLibre layer maxzoom here: that was hiding marine layers and
- // isobaths even when the user only wanted to inspect the map at large scale.
+// Never alter MapLibre layer maxzoom: that hid batymetry and isobaths.
+// Keep the source-resolution warning while allowing user-driven map zoom.
 function waitForApp() {
   return new Promise(resolve => {
     const tick = () => {
@@ -30,7 +29,6 @@ banner.setAttribute('aria-live', 'polite');
 banner.hidden = true;
 panel?.append(banner);
 
-let scheduled = false;
 function updateStatus() {
   const policy = bathymetryDisplayPolicy(state, map.getZoom(), map.getCenter().lat);
   document.body.classList.toggle('bathymetry-coarse-view', Boolean(policy.limited));
