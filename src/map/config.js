@@ -45,7 +45,9 @@ export const BATHYMETRY = {
     name: 'GEBCO 2026 · global context WMS',
     layer: 'GEBCO_Latest_2',
     provider: 'gebco',
-    contourFamily: 'none'
+    // No same-source GEBCO isolines currently available in the viewer.
+    // Offer distinctly labelled EMODnet context contours in European seas.
+    contourFamily: 'emodnet-context'
   },
   'emodnet-multicolour': {
     name: 'EMODnet Multicolour · context WMS',
