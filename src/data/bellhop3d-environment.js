@@ -7,6 +7,11 @@
  */
 import { buildEnvironmentalRequest, normalizeUtc } from './environmental-request.js';
 import { expandAoiByMeters, aoiDimensionsMeters } from '../map/spatial-scale.js';
+import {
+  SVP_DISCOVERY_SOURCES,
+  selectNearestMeasuredSvp,
+  makeSvpForecastAdaptationPlan
+} from './nearest-svp.js';
 
 export const ACOUSTIC_ENVIRONMENT_INPUTS = Object.freeze([
   Object.freeze({
@@ -110,6 +115,11 @@ export function buildBellhop3dEnvironmentInventory({
   maxDepth = 500,
   analysisGridM = 25,
   propagationBufferM = 0,
+  svpCandidates = [],
+  svpReferencePosition = null,
+  svpSimulationTime = null,
+  svpRequiredDepthM = null,
+  svpPolicy = undefined,
   bathymetrySelection = null,
   bathymetryDiscoveryPlan = null
 }) {
@@ -119,6 +129,18 @@ export function buildBellhop3dEnvironmentInventory({
   if (buffer > 1_000_000) throw new Error('Propagation-domain buffer exceeds the initial 1000 km guardrail');
   const start = normalizeUtc(startDatetime, 'startDatetime');
   const end = normalizeUtc(endDatetime, 'endDatetime');
+  const snapshot = svpSimulationTime ? normalizeUtc(svpSimulationTime, 'SVP simulation snapshot') : null;
+  if (snapshot && (snapshot < start || snapshot > end))
+    throw new Error('SVP simulation snapshot must fall within the environmental time window');
+  const profileDepth = svpRequiredDepthM === null ? Number(maxDepth) : Number(svpRequiredDepthM);
+  if (!Number.isFinite(profileDepth) || profileDepth <= 0)
+    throw new Error('SVP required water depth must be positive');
+  const nearestSvp = selectNearestMeasuredSvp({
+    aoi, sourcePosition: svpReferencePosition, simulationTime: snapshot ?? start,
+    requiredDepthM: profileDepth, candidates: svpCandidates,
+    ...(svpPolicy ? { policy: svpPolicy } : {})
+  });
+  const svpAdaptationPlan = makeSvpForecastAdaptationPlan(nearestSvp);
   const domain = buffer ? expandAoiByMeters(aoi, buffer) : { ...aoi };
   // Request source data over the propagation domain, not only the visual AOI.
   // The acquired arrays will be clipped later to the verified Bellhop grid.
@@ -152,6 +174,13 @@ export function buildBellhop3dEnvironmentInventory({
   });
 
   const allJobsPlanned = environmentalRequest.source_jobs.length;
+  const localSvp = nearestSvp.selected_cast;
+  if (localSvp) {
+    const observationItem = inventory.find(item => item.id === 'insitu_ctd_svp');
+    observationItem.acquisition_status = 'MEASURED_SVP_UPLOADED_QC_PENDING';
+    observationItem.data_status = 'PROFILE_AVAILABLE_NEEDS_VALIDATION';
+    observationItem.source_job_id = localSvp.id;
+  }
   const unresolvedJobs = environmentalRequest.source_jobs.filter(job =>
     job.execution === 'REGIONAL_SOURCE_NOT_APPLICABLE'
   ).map(job => job.id);
@@ -173,7 +202,10 @@ export function buildBellhop3dEnvironmentInventory({
       prior_hr_selection_revalidation_required: buffer > 0 && Boolean(bathymetrySelection),
       note: 'The true Bellhop domain must encompass source, receiver grid and ray propagation paths; buffering is only a discovery approximation.'
     },
-    time: { start, end, simulation_snapshots: [], alignment_status: 'NOT_CHECKED' },
+    time: { start, end, simulation_snapshots: snapshot ? [snapshot] : [], alignment_status: 'NOT_CHECKED' },
+    nearest_svp: nearestSvp,
+    svp_discovery_sources: SVP_DISCOVERY_SOURCES,
+    svp_forecast_adaptation: svpAdaptationPlan,
     coordinate_systems: {
       geographic: 'EPSG:4326',
       simulation: 'local metric coordinates to be defined around scenario origin',
@@ -184,7 +216,7 @@ export function buildBellhop3dEnvironmentInventory({
     environmental_request: environmentalRequest,
     derived_workflow: [
       { id: 'pressure', inputs: ['depth', 'latitude', 'sea_level'], status: 'NOT_COMPUTED', note: 'Pressure conversion depends on vertical reference and units.' },
-      { id: 'sound_speed', inputs: ['temperature', 'salinity', 'pressure'], status: 'NOT_COMPUTED', method: 'Approved TEOS-10/GSW transformation with clear potential/in-situ temperature semantics and salinity type.' },
+      { id: 'sound_speed', inputs: ['temperature', 'salinity', 'pressure', 'nearest_measured_svp_if_available'], status: 'NOT_COMPUTED', method: 'Nearest QC-eligible measured SVP as local anchor; compare with model SSP at cast location/time. Otherwise compute model-derived SSP from validated T/S/pressure.' },
       { id: 'geoacoustic_properties', inputs: ['seabed_substrate', 'measurements_or_approved_prior'], status: 'NOT_CONFIGURED', note: 'Substrate classes alone do not determine speed, density, loss or reflection coefficients.' },
       { id: 'boundary_surface', inputs: ['chosen_flat_boundary_or_validated_surface_model', 'sea_level', 'waves'], status: 'NOT_CONFIGURED', note: 'Bulk significant wave height is not an instantaneous surface elevation field.' },
       { id: 'bellhop3d_inputs', inputs: ['bathymetry', 'sound_speed', 'bottom_geoacoustics', 'surface_boundary', 'scenario'], status: 'NOT_ASSEMBLED', outputs: ['case.env', 'case.bty', 'case.ssp', 'case.ati (if relevant)', 'case.brc (if relevant)'] },
@@ -202,12 +234,15 @@ export function buildBellhop3dEnvironmentInventory({
         ...(buffer > 0 && bathymetrySelection ? ['RECHECK_HR_BATHYMETRY_COVERAGE_FOR_EXPANDED_DOMAIN'] : []),
         'VERIFY_SPACE_TIME_VERTICAL_DATUM_AND_UNCERTAINTY',
         'COMPUTE_AND_VALIDATE_SOUND_SPEED_3D_FIELD',
+        localSvp ? 'VALIDATE_NEAREST_MEASURED_SVP_AND_APPLICABILITY_TO_DOMAIN'
+          : 'FIND_NEAREST_VALID_MEASURED_SVP_OR_USE_VALIDATED_MODEL_SSP',
+        'VALIDATE_SVP_SPATIOTEMPORAL_CORRECTION_AGAINST_BACKGROUND_MODEL',
         'SPECIFY_GEOACOUSTIC_AND_SURFACE_BOUNDARY_MODELS',
         ...(buffer ? [] : ['DEFINE_SOURCE_RECEIVER_PROPAGATION_DOMAIN']),
         'DEFINE_SOURCE_FREQUENCY_RECEIVER_GEOMETRY_AND_SIMULATION_TIME',
         'ASSEMBLE_VALIDATE_BELLHOP3D_NATIVE_FILES_AND_EXECUTABLE'
       ],
-      note: 'This is a SOURCE-RESOLVED PLAN, not a valid or executable BELLHOP3D environment.'
+      note: 'Nearest measured SVP is selected only if eligible by distance, time and depth. This is a SOURCE-RESOLVED PLAN, not an executable Bellhop3D model or a validated range prediction.'
     },
     output_contract: {
       tl_quantity: 'Transmission loss in dB by frequency, simulation snapshot, source and receiver x/y/depth',
