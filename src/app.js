@@ -20,8 +20,8 @@ root.innerHTML = `
 <div class="app">
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
-    <span class="badge">GitHub v0.22 Visible sea context</span>
-    <span class="badge">MapLibre z22 · bathymetry resolution gated</span>
+    <span class="badge">GitHub v0.23 Isobaths at every zoom</span>
+    <span class="badge">MapLibre z22 · bathymetry scale warning</span>
     <span class="badge">Resolution-aware Data Broker</span>
   </header>
   <div class="workspace">
@@ -50,7 +50,7 @@ root.innerHTML = `
         </select></div>
         <div class="field"><label>Bathymetry opacity</label><input id="depthOpacity" type="range" min="0" max="100" value="72"></div>
         <label class="debug-control"><input id="debugBathymetryGrid" type="checkbox"> Debug numeric grid · engineering only</label>
-        <label><input id="contours" type="checkbox" checked> Source-matched isobaths</label>
+        <label><input id="contours" type="checkbox" checked> Isobaths · source identified</label>
         <div class="field"><label>Isobath detail</label><select id="contourDensity">
           <option value="dense">Detailed where source supports it</option>
           <option value="major">Major only where source supports it</option>
