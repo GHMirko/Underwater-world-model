@@ -72,6 +72,49 @@ is resolved and meaningful.
 9. **Validate** against reference cases, then provide TL to downstream
    system/sensor effectiveness models. TL alone is NOT detection probability.
 
+
+## Nearest measured SVP and range forecast adaptation
+
+For each AOI and explicit simulation snapshot:
+
+1. Search in-situ casts, including measured sound-velocity profiles (SVP) and
+   co-located CTD profiles from Copernicus In Situ, EMODnet Physics and locally
+   imported survey data. **A metadata footprint is not a downloaded cast.**
+2. Choose the nearest eligible cast to the scenario source position. Until a
+   source is assigned, use the AOI centre and mark this as provisional.
+3. Assess cast quality, horizontal distance, difference from simulation time,
+   near-surface sample, bottom-depth coverage and data provenance. By default,
+   the screening policy uses 50 km, 72 h and 80% water-depth coverage; these
+   are operator-configurable *provisional heuristics*, **not** environmental
+   representativeness standards.
+4. Treat selected observed `c(z)` as the local reference. If a validated
+   concurrent model field exists, compare c_obs(z) with c_model at the cast
+   location and observation time:
+   `delta_c(z) = c_obs(z) - c_model_at_cast(z)`.
+5. A corrected field may use `c_corrected(x,y,z,t) =
+   c_model(x,y,z,t) + w(x,y,t) * delta_c(z)`, but `w` and any spatial/time
+   extrapolation require **validated** representativeness assumptions.
+   A single nearby cast does not establish full-3D horizontal variation.
+6. Run the acoustic model again with observed/adjusted SSP, bathymetry,
+   bottom and sea-surface boundary, source and receiver geometry. Analyse
+   differences in TL by frequency, time, depth, range and azimuth.
+7. Only then derive a propagation-range metric from a declared loss criterion,
+   or a detection range from sensor/source signature, noise, directivity,
+   threshold, processing model and probability requirements. A generic
+   single-number "range" does not follow directly from selecting the SVP.
+8. If no measured cast passes quality and distance/time/depth gates, use a
+   Copernicus-derived SSP **only after actual source acquisition and
+   validation**; report no measured-cast claim. Propagate uncertainties.
+
+Current v0.24 interface supports a JSON file of already acquired **measured**
+SVP candidates (a top-level array or `{"profiles":[...]}`). Each cast has
+`id`, `latitude`, `longitude`, `observed_at` (UTC), `source`, and a
+`samples` array with numeric `depth_m` and `sound_speed_m_s`. The app
+reports the nearest eligible cast and preserves rejected-candidate diagnostics.
+It does **not yet** perform automatic remote profile download, spatial bias
+correction, Bellhop execution or acoustic-range calculation. Those are
+separately gated future components.
+
 ## Readiness status
 
 A **SOURCE-RESOLVED** inventory is not an acquired or validated environment.
