@@ -32,7 +32,7 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await expect(page.locator('.header .badge').first()).toContainText('v0.21');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.22');
   await expect(page.locator('#baseMap option')).toHaveCount(2);
   await expect(page.locator('#baseMap')).toContainText('Minimal');
   await expect(page.locator('#baseMap')).toContainText('Satellite');
@@ -255,4 +255,43 @@ test('v0.21 land style switch preserves the marine stack, AOI and numeric data',
 
   await page.locator('#baseMap').selectOption('minimal');
   await expect.poll(async () => page.evaluate(() => window.__MSO__.map.getLayoutProperty('land-basemap-minimal', 'visibility'))).toBe('visible');
+});
+
+test('v0.22 renders sea context without AOI and does not reset it on land switch', async ({ page }) => {
+  await expect(page.locator('#bathyMode')).toHaveValue('aoi-adaptive');
+  await expect(page.locator('#aoiStatus')).toContainText('No AOI selected');
+  await expect(page.locator('#seaContextNote')).toContainText('CONTEXT ONLY');
+  await expect.poll(async () => page.evaluate(() => Boolean(window.__MSO__.map.getLayer('bathymetry-fallback-layer'))), { timeout: 10000 }).toBe(true);
+  const before = await page.evaluate(() => {
+    const map = window.__MSO__.map;
+    const style = map.getStyle();
+    return {
+      oceanFill: map.getPaintProperty('sea-water-background', 'fill-color'),
+      bathySource: map.getSource('bathymetry-fallback-source'),
+      bathyLayer: map.getLayer('bathymetry-fallback-layer'),
+      mainBathy: Boolean(map.getLayer('bathymetry-layer')),
+      waterIndex: style.layers.findIndex(layer => layer.id === 'sea-water-background'),
+      bathyIndex: style.layers.findIndex(layer => layer.id === 'bathymetry-fallback-layer'),
+      landMode: map.getLayoutProperty('land-basemap-minimal', 'visibility')
+    };
+  });
+  expect(before.oceanFill).toBe('#b9d8eb');
+  expect(before.mainBathy).toBe(false);
+  expect(before.bathyIndex).toBeGreaterThan(before.waterIndex);
+  expect(before.landMode).toBe('visible');
+
+  await page.locator('#baseMap').selectOption('satellite');
+  const after = await page.evaluate(() => {
+    const map = window.__MSO__.map;
+    return {
+      oceanFill: map.getPaintProperty('sea-water-background', 'fill-color'),
+      mainBathy: Boolean(map.getLayer('bathymetry-layer')),
+      fallbackPresent: Boolean(map.getLayer('bathymetry-fallback-layer')),
+      landMode: map.getLayoutProperty('land-basemap-satellite', 'visibility')
+    };
+  });
+  expect(after.fallbackPresent).toBe(true);
+  expect(after.oceanFill).toBe('#b9d8eb');
+  expect(after.mainBathy).toBe(false);
+  expect(after.landMode).toBe('visible');
 });

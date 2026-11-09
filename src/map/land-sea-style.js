@@ -62,7 +62,7 @@ export function independentMapStyle(baseKey = 'minimal') {
     'source-layer': 'water',
     filter: ['in', ['get', 'class'], ['literal', WATER_CLASSES]],
     layout: { visibility: 'none' }, // enabled only after provider availability is verified
-    paint: { 'fill-color': '#f8fcff', 'fill-opacity': 1 }
+    paint: { 'fill-color': '#b9d8eb', 'fill-opacity': 1 }
   });
   return { version: 8, sources, layers };
 }

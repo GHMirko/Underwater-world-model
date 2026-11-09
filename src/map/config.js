@@ -61,6 +61,10 @@ export function contourFamilyForBathymetry(mode) {
 }
 
 export function visualBathymetryStack(mode) {
+  // AOI REAL has no display raster until its numeric data arrives.
+  // Keep an independent, explicitly contextual EMODnet background visible
+  // outside the AOI and before an AOI is drawn. This is NOT AOI data.
+  if (mode === 'aoi-adaptive') return ['emodnet-multicolour', 'aoi-adaptive'];
   const selected = BATHYMETRY[mode] ?? BATHYMETRY.none;
   if (!selected.layer) return [];
   if (!selected.visualFallback) return [mode];

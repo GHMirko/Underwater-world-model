@@ -47,7 +47,7 @@ test('land switch mutates only land visibility; never sea layers or map style', 
   assert.equal(switchLandBasemap(map, 'minimal'), true);
   assert.equal(landState.get(LAND_LAYER_IDS.satellite), 'none');
   assert.equal(landState.get(LAND_LAYER_IDS.minimal), 'visible');
-  assert.equal(style.layers[3].paint['fill-color'], '#f8fcff');
+  assert.equal(style.layers[3].paint['fill-color'], '#b9d8eb');
 });
 
 test('unknown land selection degrades to minimal without touching marine data', () => {
