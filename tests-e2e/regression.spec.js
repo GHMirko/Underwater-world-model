@@ -64,6 +64,12 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   await expect(page.locator('#contourStatus')).toContainText('Adaptive isobaths');
   await expect(page.locator('#contourStatus')).toContainText('confidence');
 
+  await expect.poll(async () => page.evaluate(() =>
+    window.__MSO__.map.getLayer('aoi-derived-contours-layer')
+      ? window.__MSO__.map.getLayoutProperty('aoi-derived-contours-layer', 'visibility')
+      : 'missing'
+  ), { timeout: 10000 }).toBe('visible');
+
   const wm = await page.evaluate(() => ({
     quality: window.__MSO__.state.bathymetryQuality,
     summary: window.__MSO__.state.adaptiveContours,
@@ -191,7 +197,9 @@ test('v0.20 keeps micro-AOI geographic zoom but caps bathymetry rendering to sou
 
 test('v0.21 land style switch preserves the marine stack, AOI and numeric data', async ({ page }) => {
   await page.locator('#bathyMode').selectOption('emodnet-rainbow');
-  await page.waitForTimeout(350);
+  await expect.poll(async () => page.evaluate(() =>
+    Boolean(window.__MSO__.map.getLayer('bathymetry-layer'))
+  ), { timeout: 10000 }).toBe(true);
   const before = await page.evaluate(() => {
     const { map, state } = window.__MSO__;
     window.__landSeaProbe = {
