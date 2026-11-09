@@ -20,7 +20,7 @@ root.innerHTML = `
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
     <span class="badge">GitHub v0.19 Bathymetry Source Broker</span>
-    <span class="badge">MapLibre z22</span>
+    <span class="badge">MapLibre z22 · bathymetry resolution gated</span>
     <span class="badge">Resolution-aware Data Broker</span>
   </header>
   <div class="workspace">
@@ -60,7 +60,7 @@ root.innerHTML = `
         </div>
         <button id="fitAoi" class="btn" style="width:100%;margin-top:6px" disabled>Fit AOI / micro-zoom</button>
         <div id="aoiStatus" class="status">No AOI selected.</div>
-        <div id="aoiScaleStatus" class="status">Viewer supports zoom to level 22. AOI is auto-fitted after drawing; analysis resolution remains source-dependent.</div>
+        <div id="aoiScaleStatus" class="status">Viewer fino a z22; il dettaglio batimetrico ha un limite dipendente dalla risoluzione sorgente. Il World Model numerico resta invariato.</div>
         <div id="bathyStatus" class="status">Bathymetry will be sampled automatically after AOI selection.</div>
         <div id="bathySourceStatus" class="status">Bathymetry source: define an AOI for HR-DTM discovery.</div>
         <div class="field"><label>Mission</label><select id="mission"><option>ASW</option><option>MCM</option><option>REA</option></select></div>

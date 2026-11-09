@@ -58,7 +58,8 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   await expect(page.locator('#fitAoi')).toBeEnabled();
   await expect(page.locator('#bathyStatus')).toContainText('REAL EMODnet');
   await expect(page.locator('#aoiDepthGridStatus')).toContainText('confidence');
-  await expect(page.locator('#depthLegend')).toBeVisible();
+  // Beyond the native bathymetric display cap the legend is intentionally hidden.
+  await expect(page.locator('#depthLegend')).toBeHidden();
   await expect(page.locator('#depthLegend')).toContainText('AOI REAL bathymetry');
   await expect(page.locator('#contourStatus')).toContainText('Adaptive isobaths');
   await expect(page.locator('#contourStatus')).toContainText('confidence');
@@ -162,4 +163,27 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   await expect(page.locator('#contourStatus')).toContainText('waiting');
 
   expect(errors).toEqual([]);
+});
+
+
+test('v0.20 keeps micro-AOI geographic zoom but caps bathymetry rendering to source resolution', async ({ page }) => {
+  await page.evaluate(() => window.__MSO__.map.setZoom(17));
+  await drawAoi(page, { x: 150, y: 130 }, { x: 550, y: 530 });
+  await expect(page.locator('#bathymetryDetailLimit')).toBeVisible();
+  await expect(page.locator('#bathymetryDetailLimit')).toContainText('Limite dettaglio batimetrico');
+  const state = await page.evaluate(() => {
+    const map = window.__MSO__.map;
+    return {
+      geographicZoom: map.getZoom(),
+      derivedContourMaxZoom: map.getLayer('aoi-derived-contours-layer')?.maxzoom ?? null,
+      bodyLimited: document.body.classList.contains('bathymetry-detail-limited'),
+      aoiSelected: Boolean(window.__MSO__.state.aoi)
+    };
+  });
+  expect(state.geographicZoom).toBeGreaterThan(16);
+  expect(state.derivedContourMaxZoom).toBeLessThan(state.geographicZoom);
+  expect(state.bodyLimited).toBe(true);
+  expect(state.aoiSelected).toBe(true);
+  await page.evaluate(() => window.__MSO__.map.setZoom(10));
+  await expect(page.locator('body')).not.toHaveClass(/bathymetry-detail-limited/);
 });
