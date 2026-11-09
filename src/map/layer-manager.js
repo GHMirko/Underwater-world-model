@@ -17,6 +17,7 @@ export class LayerManager {
   constructor(map) {
     this.map = map;
     this.bathyMode = 'chart-relief';
+    this._mountedBathyMode = null;
     this.depthOpacity = 0.72;
     this._restoreTimers = new Set();
     this._styleHandler = () => this._scheduleRestore();
@@ -75,11 +76,26 @@ export class LayerManager {
 
   renderBathymetry() {
     const map = this.map;
-    if (!map.isStyleLoaded()) return false;
-    this._clearBathymetry();
+    // isStyleLoaded() becomes false while ANY remote tile is loading.
+    // That is not a reason to block adding/removing already mounted style
+    // layers. The base layer proves that the style graph exists.
+    if (!map.getLayer('background')) return false;
 
     const stack = visualBathymetryStack(this.bathyMode);
-    if (!stack.length) return true;
+    const primaryExpected = Boolean(BATHYMETRY[this.bathyMode]?.layer);
+    const fallbackExpected = stack.length > 1;
+    // Several view-mode controllers can request the same bathymetry while
+    // their callbacks settle. Do not tear down sources for an unchanged mode:
+    // the user could otherwise see a blank flash or lose layer identity
+    // during a land-only basemap switch.
+    if (this._mountedBathyMode === this.bathyMode &&
+        Boolean(map.getLayer(IDS.bathyLayer)) === primaryExpected &&
+        Boolean(map.getLayer(IDS.fallbackLayer)) === fallbackExpected) return true;
+
+    this._clearBathymetry();
+    this._mountedBathyMode = null;
+
+    if (!stack.length) { this._mountedBathyMode = this.bathyMode; return true; }
 
     if (stack.length > 1) {
       const fallbackSpec = BATHYMETRY[stack[0]];
@@ -94,7 +110,7 @@ export class LayerManager {
     }
 
     const spec = BATHYMETRY[this.bathyMode] ?? BATHYMETRY['chart-relief'];
-    if (!spec.layer) return true;
+    if (!spec.layer) { this._mountedBathyMode = this.bathyMode; return true; }
 
     if (spec.provider === 'seascape') {
       map.addSource(IDS.bathySource, {
@@ -113,11 +129,13 @@ export class LayerManager {
           resampling: 'nearest'
         }
       });
+      this._mountedBathyMode = this.bathyMode;
       return true;
     }
 
     if (spec.provider === 'gebco') {
       this._addGebcoRaster(IDS.bathySource, IDS.bathyLayer, spec.layer, this.depthOpacity);
+      this._mountedBathyMode = this.bathyMode;
       return true;
     }
 
@@ -127,6 +145,7 @@ export class LayerManager {
       spec.layer,
       this.depthOpacity
     );
+    this._mountedBathyMode = this.bathyMode;
     return true;
   }
 
@@ -140,7 +159,7 @@ export class LayerManager {
     this._restoreTimers.clear();
 
     const tryRestore = attempt => {
-      if (this.map.isStyleLoaded()) {
+      if (this.map.getLayer('background')) {
         try {
           this.renderBathymetry();
           return;
