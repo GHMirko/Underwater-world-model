@@ -65,6 +65,36 @@ export const ENVIRONMENT_VARIABLES = Object.freeze({
     }),
     resolutionNote: 'Regional model grid ~1/24°; sub-grid variation inside micro-AOIs is not resolved.'
   }),
+  sea_level: Object.freeze({
+    id: 'sea_level',
+    label: 'Sea surface height / sea level',
+    domain: 'sea-surface',
+    provider: 'Copernicus Marine',
+    productId: 'MEDSEA_ANALYSISFORECAST_PHY_006_013',
+    datasetId: 'cmems_mod_med_phy-ssh_anfc_4.2km-2D_PT1H-m',
+    variables: ['zos'],
+    structure: 'grid-3d-time-lat-lon',
+    canonicalFormat: 'netcdf',
+    execution: 'backend-required',
+    nativeHorizontalResolutionM: 4200,
+    coverageBbox: [-17.29, 30.19, 36.29, 45.98],
+    resolutionNote: 'Hourly regional sea surface height: regional context, not local tide gauge. Datum alignment with bathymetry required.'
+  }),
+  waves: Object.freeze({
+    id: 'waves',
+    label: 'Sea state (Hs, period, direction)',
+    domain: 'sea-surface',
+    provider: 'Copernicus Marine',
+    productId: 'MEDSEA_ANALYSISFORECAST_WAV_006_017',
+    datasetId: 'cmems_mod_med_wav_anfc_4.2km_PT1H-i',
+    variables: ['VHM0', 'VTM02', 'VMDR'],
+    structure: 'grid-3d-time-lat-lon',
+    canonicalFormat: 'netcdf',
+    execution: 'backend-required',
+    nativeHorizontalResolutionM: 4200,
+    coverageBbox: [-18.12, 30.19, 36.29, 45.98],
+    resolutionNote: 'Hourly regional waves. Bulk Hs/period/direction do not determine a unique instantaneous surface or roughness spectrum.'
+  }),
   bathymetry: Object.freeze({
     id: 'bathymetry',
     label: 'Bathymetry',
