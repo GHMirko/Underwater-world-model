@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { aoiToGeoJSON } from '../src/map/aoi-controller.js';
-import { BATHYMETRY, contourFamilyForBathymetry } from '../src/map/config.js';
+import { BATHYMETRY, contourFamilyForBathymetry, visualBathymetryStack } from '../src/map/config.js';
 import { contourThreshold, filterContours } from '../src/map/contour-model.js';
 import { chartReliefExpression, legendModel } from '../src/map/depth-legend.js';
 import { assessBathymetryConfidence, buildAdaptiveContours, chooseContourScheme, contourSummary } from '../src/map/local-contours.js';
@@ -270,4 +270,11 @@ test('global AOI resolves Copernicus global physics and GEBCO bathymetry fallbac
   assert.equal(bathy.provider, 'GEBCO');
   assert.equal(bathy.native_horizontal_resolution_m, 463);
   assert.equal(substrate.spatial_adequacy.status, 'UNRESOLVED');
+});
+
+test('v0.22 shows sea context in AOI REAL mode without confusing it with numeric AOI data', () => {
+  assert.deepEqual(visualBathymetryStack('aoi-adaptive'), ['emodnet-multicolour', 'aoi-adaptive']);
+  assert.deepEqual(visualBathymetryStack('none'), []);
+  assert.deepEqual(visualBathymetryStack('emodnet-rainbow'), ['emodnet-rainbow']);
+  assert.deepEqual(visualBathymetryStack('chart-relief'), ['emodnet-multicolour', 'chart-relief']);
 });
