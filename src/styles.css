@@ -4,4 +4,4 @@
 .bathymetry-detail-limit{position:absolute;z-index:6;top:12px;left:12px;max-width:min(530px,calc(100% - 100px));padding:9px 12px;background:rgba(13,34,48,.93);border:1px solid #dca85c;border-radius:8px;color:#f3d7a7;font:600 12px/1.4 Inter,Segoe UI,Arial,sans-serif;box-shadow:0 2px 8px #0006;pointer-events:none}
 .bathymetry-detail-limit.limited{border-color:#efb66b;background:rgba(35,31,26,.96)}
 .bathymetry-detail-limit[hidden]{display:none}
-body.bathymetry-detail-limited .contour-label,body.bathymetry-detail-limited .depth-legend{display:none!important}
+/* Do not suppress isobaths or depth legend on visual overzoom. */

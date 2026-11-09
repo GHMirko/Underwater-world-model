@@ -49,6 +49,9 @@ test('adaptive contour threshold becomes finer with zoom', () => {
   assert.equal(contourThreshold(5.5), 1000);
   assert.equal(contourThreshold(8), 200);
   assert.equal(contourThreshold(11), 50);
+  assert.equal(contourThreshold(13), 20);
+  assert.equal(contourThreshold(15), 10);
+  assert.equal(contourThreshold(17), 5);
 });
 
 test('contour filter keeps only depths allowed at current zoom', () => {
@@ -62,6 +65,16 @@ test('contour filter keeps only depths allowed at current zoom', () => {
   };
   const filtered = filterContours(fc, 8);
   assert.deepEqual(filtered.features.map(feature => feature.properties._depth), [200, 500, 1000]);
+});
+
+test('at large map zoom show published shallow contours rather than discarding depths below 50m', () => {
+  const features = [5, 10, 20, 30, 40, 50, 100].map(depth => ({
+    type: 'Feature',
+    properties: { Depth: depth },
+    geometry: { type: 'LineString', coordinates: [[0, 0], [1, 1]] }
+  }));
+  const selected = filterContours({ type: 'FeatureCollection', features }, 17);
+  assert.deepEqual(selected.features.map(f => f.properties._depth), [5, 10, 20, 30, 40, 50, 100]);
 });
 
 test('chart relief elevation stops are strictly ascending', () => {
@@ -78,7 +91,7 @@ test('viewer bathymetry separates AOI numeric mode from context WMS and source-m
   assert.equal(contourFamilyForBathymetry('chart-relief'), 'seascape');
   assert.equal(contourFamilyForBathymetry('emodnet-rainbow'), 'emodnet');
   assert.equal(contourFamilyForBathymetry('emodnet-multicolour'), 'emodnet');
-  assert.equal(contourFamilyForBathymetry('gebco-global'), 'none');
+  assert.equal(contourFamilyForBathymetry('gebco-global'), 'emodnet-context');
   assert.equal(contourFamilyForBathymetry('none'), 'none');
   const expression = chartReliefExpression();
   assert.equal(expression.at(-1), 'rgba(0,0,0,0)');

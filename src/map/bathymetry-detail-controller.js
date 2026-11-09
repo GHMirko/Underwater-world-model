@@ -1,27 +1,13 @@
 /**
- * Prevent low-resolution bathymetry from looking like micro-survey data.
- * Preserve high-zoom navigation and land basemap; restrict ONLY bathymetry layers.
- * MapLibre layer maxzoom is independent of visibility toggles set by other controllers.
+ * Display a warning when zoom exceeds source detail; never hide layers.
+ * Source fidelity and requested map scale are independent dimensions.
  */
 import { state, subscribeState } from '../state.js';
 import { bathymetryDisplayPolicy } from './bathymetry-detail-policy.js';
 
-const DISPLAY_LAYERS = [
-  'bathymetry-layer',
-  'bathymetry-fallback-layer',
-  'contours-fallback-layer',
-  'adaptive-contours-line',
-  'dense-isobaths-line',
-  'aoi-bathymetry-surface-layer',
-  'aoi-derived-contours-layer',
-  'aoi-recovery-contours-layer',
-  'aoi-readable-contours-casing',
-  'aoi-wcs-grid-layer',
-  'aoi-wcs-coastal-layer',
-  'aoi-depth-grid-layer',
-  'aoi-depth-grid-outline'
-];
-
+// Zoom beyond native grid resolution is visual overzoom, not missing data.
+// Never alter MapLibre layer maxzoom: that hid batymetry and isobaths.
+// Keep the source-resolution warning while allowing user-driven map zoom.
 function waitForApp() {
   return new Promise(resolve => {
     const tick = () => {
@@ -43,24 +29,9 @@ banner.setAttribute('aria-live', 'polite');
 banner.hidden = true;
 panel?.append(banner);
 
-let scheduled = false;
-function applyLimit() {
-  if (!map.isStyleLoaded()) return;
-  const policy = bathymetryDisplayPolicy(state, map.getZoom(), map.getCenter().lat);
-  const limit = policy.enabled ? policy.zoomLimit : 22;
-  for (const id of DISPLAY_LAYERS) {
-    const layer = map.getLayer(id);
-    if (!layer) continue;
-    // Idempotent updates: setLayerZoomRange emits styledata, so avoid loops.
-    if (Math.abs((layer.maxzoom ?? 24) - limit) > 0.001) {
-      map.setLayerZoomRange(id, layer.minzoom ?? 0, limit);
-    }
-  }
-}
-
 function updateStatus() {
   const policy = bathymetryDisplayPolicy(state, map.getZoom(), map.getCenter().lat);
-  document.body.classList.toggle('bathymetry-detail-limited', Boolean(policy.limited));
+  document.body.classList.toggle('bathymetry-coarse-view', Boolean(policy.limited));
   if (!policy.enabled) {
     banner.hidden = true;
     return;
@@ -73,24 +44,24 @@ function updateStatus() {
     : 'risoluzione sorgente non verificata';
   const supporting = microWarning ? ' · AOI non risolta dalla griglia' : '';
   banner.textContent = policy.limited
-    ? 'Limite dettaglio batimetrico z' + policy.zoomLimit.toFixed(1) +
-      ' superato: layer e isobate nascosti (' + native + '). Carta e AOI restano navigabili.' + supporting
-    : 'Dettaglio batimetrico insufficiente (' + native + supporting +
-      '). Zoom massimo della batimetria z' + policy.zoomLimit.toFixed(1) + '.';
+    ? 'Sovrascala batimetrica: oltre z' + policy.zoomLimit.toFixed(1) +
+      ' (' + native + '). Layer e isobate restano visibili come contesto indicativo, NON per misure locali.' + supporting
+    : 'Risoluzione batimetrica insufficiente per analisi locali (' + native + supporting +
+      '). Ingrandire non aggiunge dettaglio.';
   banner.classList.toggle('limited', policy.limited);
 }
 
+let scheduled = false;
 function schedule() {
   if (scheduled) return;
   scheduled = true;
-  setTimeout(() => {
+  queueMicrotask(() => {
     scheduled = false;
-    try { applyLimit(); updateStatus(); } catch { /* MapLibre style transition */ }
-  }, 0);
+    updateStatus();
+  });
 }
 
-// The first pass and subsequent styledata events also cover layers recreated
-// asynchronously by WCS, fallback, base-map or contour controllers.
+// The warning reacts to map zoom and source metadata only; it does not mutate marine layers.
 map.on('styledata', schedule);
 map.on('style.load', schedule);
 map.on('zoom', () => { updateStatus(); schedule(); });

@@ -1,4 +1,4 @@
-const DEPTHS = new Set([50, 100, 200, 500, 1000, 2000, 5000]);
+const DEPTHS = new Set([5, 10, 20, 30, 40, 50, 100, 200, 300, 500, 1000, 1500, 2000, 2500, 3000, 4000, 5000]);
 
 export function contourThreshold(zoom) {
   if (zoom < 5) return Infinity;
@@ -6,7 +6,10 @@ export function contourThreshold(zoom) {
   if (zoom < 7.6) return 500;
   if (zoom < 9) return 200;
   if (zoom < 10.5) return 100;
-  return 50;
+  if (zoom < 12) return 50;
+  if (zoom < 14) return 20;
+  if (zoom < 16) return 10;
+  return 5;
 }
 
 function depthFromProperties(properties = {}) {

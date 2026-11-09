@@ -68,17 +68,23 @@ export class AdaptiveContours {
     if (this.visible) this.refresh();
   }
 
+  contextLabel() {
+    return this.family === 'emodnet-context'
+      ? 'EMODnet isobaths · DIFFERENT SOURCE from GEBCO · context only'
+      : 'Source-matched EMODnet isobaths';
+  }
+
   async refresh() {
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this._refreshNow(), 180);
   }
 
   async _refreshNow() {
-    if (!this.visible || !this.map.isStyleLoaded()) return;
+    if (!this.visible || !this.map.getLayer('background')) return;
 
     if (this.family === 'none') {
       this._removeAll();
-      this.onStatus('No bathymetry selected · isobaths hidden');
+      this.onStatus(this.bathymetryMode === 'none' ? 'Bathymetry off · isobaths hidden' : 'No contours available for the selected source');
       return;
     }
 
@@ -100,7 +106,7 @@ export class AdaptiveContours {
     const zoom = this.map.getZoom();
     if (zoom < 5) {
       this._renderFallback();
-      this.onStatus('Source-matched EMODnet isobaths · low-zoom WMS overview');
+      this.onStatus(this.contextLabel() + ' · low-zoom WMS overview');
       return;
     }
 
@@ -119,7 +125,7 @@ export class AdaptiveContours {
       `https://ows.emodnet-bathymetry.eu/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=emodnet:contours&outputFormat=application/json&srsName=EPSG:4326&count=5000&bbox=${bbox},EPSG:4326`
     ];
 
-    this.onStatus('EMODnet context isobaths active · loading vector upgrade…');
+    this.onStatus(this.contextLabel() + ' · loading vector upgrade…');
     for (const url of urls) {
       try {
         const response = await fetch(url, { signal: requestController.signal, headers: { Accept: 'application/json' } });
@@ -138,11 +144,11 @@ export class AdaptiveContours {
     }
 
     if (!this.visible || this.abortController !== requestController || requestController.signal.aborted) return;
-    this.onStatus('Source-matched EMODnet isobaths · WFS unavailable, WMS context active');
+    this.onStatus(this.contextLabel() + ' · WFS unavailable, WMS context active');
   }
 
   _renderDense() {
-    if (!this.map.isStyleLoaded()) return;
+    if (!this.map.getLayer('background')) return;
     if (this.map.getSource(DENSE_SOURCE)) return;
     this.map.addSource(DENSE_SOURCE, { type: 'vector', url: SEASCAPE_VECTOR });
     this.map.addLayer({
@@ -163,8 +169,14 @@ export class AdaptiveContours {
 
   _renderVector() {
     if (!this.visible) return;
-    this._removeFallback();
     const filtered = filterContours(this.raw, this.map.getZoom());
+    if (!filtered.features.length) {
+      this._clearVector();
+      this._renderFallback();
+      this.onStatus(this.contextLabel() + ' · no matching vector isobaths in this view; WMS context remains');
+      return;
+    }
+    this._removeFallback();
     if (this.map.getSource(SOURCE)) this.map.getSource(SOURCE).setData(filtered);
     else {
       this.map.addSource(SOURCE, { type: 'geojson', data: filtered });
@@ -181,10 +193,10 @@ export class AdaptiveContours {
     }
     this._renderLabels(filtered);
     if (!filtered.features.length && this.map.getZoom() >= 14) {
-      this.onStatus('EMODnet standard contours: no 50 m+ line in this micro-area · dense local isobaths require HR/local bathymetry');
+      this.onStatus(this.contextLabel() + ' · no vector contour in micro-area; detailed isobaths require HR/local bathymetry');
       return;
     }
-    this.onStatus(`Source-matched EMODnet: ${filtered.features.length} features · ${this.markers.length} labels · ≥ ${contourThreshold(this.map.getZoom())} m`);
+    this.onStatus(`${this.contextLabel()}: ${filtered.features.length} features · ${this.markers.length} labels · ≥ ${contourThreshold(this.map.getZoom())} m depth`);
   }
 
   _renderLabels(filtered) {
@@ -210,10 +222,10 @@ export class AdaptiveContours {
   }
 
   _renderFallback() {
-    if (!this.visible || !this.map.isStyleLoaded()) return;
+    if (!this.visible || !this.map.getLayer('background')) return;
     this._clearVector();
     if (!this.map.getSource(FALLBACK_SOURCE)) {
-      this.map.addSource(FALLBACK_SOURCE, { type: 'raster', tiles: [emodnetWms('emodnet:contours')], tileSize: 256, maxzoom: 22 });
+      this.map.addSource(FALLBACK_SOURCE, { type: 'raster', tiles: [emodnetWms('emodnet:contours')], tileSize: 256, maxzoom: 13 });
       this.map.addLayer({ id: FALLBACK_LAYER, type: 'raster', source: FALLBACK_SOURCE, paint: { 'raster-opacity': 0.95 } });
     }
   }

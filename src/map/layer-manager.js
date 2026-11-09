@@ -47,13 +47,15 @@ export class LayerManager {
     safeRemove(this.map, IDS.fallbackLayer, IDS.fallbackSource);
   }
 
-  _addRasterWms(sourceId, layerId, tile, opacity) {
+  _addRasterWms(sourceId, layerId, tile, opacity, nativeTileMaxZoom = 13) {
     this.map.addSource(sourceId, {
       type: 'raster',
       tiles: [tile],
       tileSize: 256,
       minzoom: 0,
-      maxzoom: 22
+      // Request tiles only up to the resolution appropriate to the source.
+      // MapLibre then overzooms those cached tiles at larger viewing scales.
+      maxzoom: nativeTileMaxZoom
     });
     this.map.addLayer({
       id: layerId,
@@ -67,11 +69,11 @@ export class LayerManager {
   }
 
   _addEmodnetRaster(sourceId, layerId, layerName, opacity) {
-    this._addRasterWms(sourceId, layerId, emodnetWms(layerName), opacity);
+    this._addRasterWms(sourceId, layerId, emodnetWms(layerName), opacity, 13);
   }
 
   _addGebcoRaster(sourceId, layerId, layerName, opacity) {
-    this._addRasterWms(sourceId, layerId, gebcoWms(layerName), opacity);
+    this._addRasterWms(sourceId, layerId, gebcoWms(layerName), opacity, 11);
   }
 
   renderBathymetry() {
