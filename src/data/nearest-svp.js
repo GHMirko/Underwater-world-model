@@ -94,8 +94,8 @@ export function assessSvpCandidate(candidate, {
   policy = DEFAULT_SVP_POLICY
 }) {
   const reasons = [];
-  const latitude = Number(candidate?.latitude);
-  const longitude = Number(candidate?.longitude);
+  const latitude = typeof candidate?.latitude === 'number' ? candidate.latitude : NaN;
+  const longitude = typeof candidate?.longitude === 'number' ? candidate.longitude : NaN;
   if (!Number.isFinite(latitude) || Math.abs(latitude) > 90 ||
       !Number.isFinite(longitude) || Math.abs(longitude) > 180) reasons.push('INVALID_POSITION');
   const observedMs = parseTime(candidate?.observed_at);
@@ -106,8 +106,8 @@ export function assessSvpCandidate(candidate, {
 
   const samples = Array.isArray(candidate?.samples) ? candidate.samples : [];
   const validSamples = samples.map(row => ({
-    depth_m: Number(row?.depth_m),
-    sound_speed_m_s: Number(row?.sound_speed_m_s)
+    depth_m: typeof row?.depth_m === 'number' ? row.depth_m : NaN,
+    sound_speed_m_s: typeof row?.sound_speed_m_s === 'number' ? row.sound_speed_m_s : NaN
   })).filter(row => Number.isFinite(row.depth_m) && row.depth_m >= 0 &&
     Number.isFinite(row.sound_speed_m_s) && row.sound_speed_m_s >= 1350 && row.sound_speed_m_s <= 1650
   ).sort((a, b) => a.depth_m - b.depth_m);
