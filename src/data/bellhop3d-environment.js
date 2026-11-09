@@ -125,7 +125,11 @@ export function buildBellhop3dEnvironmentInventory({
   const environmentalRequest = buildEnvironmentalRequest({
     aoi: domain, startDatetime: start, endDatetime: end, minDepth, maxDepth, analysisGridM,
     variables: ['bathymetry', 'temperature', 'salinity', 'seabed_substrate', 'sea_level', 'waves', 'currents'],
-    bathymetrySelection, bathymetryDiscoveryPlan
+    // AOI-scoped HR discovery is NOT evidence of full propagation-domain coverage.
+    // Reverify native HR coverage across the expanded domain before promoting
+    // the selected survey from candidate to an executable bathymetry job.
+    bathymetrySelection: buffer > 0 ? null : bathymetrySelection,
+    bathymetryDiscoveryPlan: buffer > 0 ? null : bathymetryDiscoveryPlan
   });
 
   const inventory = ACOUSTIC_ENVIRONMENT_INPUTS.map(def => {
@@ -166,6 +170,7 @@ export function buildBellhop3dEnvironmentInventory({
       domain_bbox: [domain.minLon, domain.minLat, domain.maxLon, domain.maxLat],
       dimensions_m: aoiDimensionsMeters(domain),
       status: buffer > 0 ? 'CANDIDATE_ONLY_REQUIRES_SOURCE_RECEIVER_COVERAGE_CHECK' : 'NOT_DEFINED_BEYOND_AOI',
+      prior_hr_selection_revalidation_required: buffer > 0 && Boolean(bathymetrySelection),
       note: 'The true Bellhop domain must encompass source, receiver grid and ray propagation paths; buffering is only a discovery approximation.'
     },
     time: { start, end, simulation_snapshots: [], alignment_status: 'NOT_CHECKED' },
@@ -194,6 +199,7 @@ export function buildBellhop3dEnvironmentInventory({
       completed_and_validated_inputs: [],
       blocking_gates: [
         'ACQUIRE_NUMERIC_BATHY_AND_FULL_3D_WATER_COLUMN',
+        ...(buffer > 0 && bathymetrySelection ? ['RECHECK_HR_BATHYMETRY_COVERAGE_FOR_EXPANDED_DOMAIN'] : []),
         'VERIFY_SPACE_TIME_VERTICAL_DATUM_AND_UNCERTAINTY',
         'COMPUTE_AND_VALIDATE_SOUND_SPEED_3D_FIELD',
         'SPECIFY_GEOACOUSTIC_AND_SURFACE_BOUNDARY_MODELS',
