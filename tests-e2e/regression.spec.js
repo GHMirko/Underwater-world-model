@@ -319,3 +319,31 @@ test('v0.23 GEBCO context WMS remains mounted beyond native scale and labels iso
   expect(current.rasterSourceMaxZoom).toBe(11);
   expect(current.contoursPresent).toBe(true);
 });
+
+
+test('v0.24 exposes all Bellhop3D environment inputs but does not claim TL run readiness', async ({ page }) => {
+  await expect(page.locator('#acousticEnvironmentPanel')).toBeVisible();
+  await page.locator('#buildAcousticInventory').click();
+  await expect(page.locator('#bellhopInventoryStatus')).toContainText('Define an AOI');
+
+  await drawAoi(page);
+  await page.locator('#bellhopBufferM').fill('5000');
+  await page.locator('#buildAcousticInventory').click();
+  await expect(page.locator('#bellhopInventoryStatus')).toContainText('NOT READY / NO TL RUN');
+  await expect(page.locator('#bellhopInventoryRows .source-candidate')).toHaveCount(12);
+  await expect(page.locator('#downloadBellhopInventory')).toBeEnabled();
+
+  const manifest = await page.evaluate(() => window.__MSO__.getAcousticInventory());
+  expect(manifest.schema).toBe('bellhop3d-environment-inventory/0.1');
+  expect(manifest.readiness.status).toBe('NOT_READY');
+  expect(manifest.readiness.completed_and_validated_inputs).toHaveLength(0);
+  expect(manifest.environmental_request.source_jobs).toHaveLength(7);
+  expect(manifest.propagation_domain.buffer_m).toBe(5000);
+  expect(manifest.derived_workflow.find(item => item.id === 'transmission_loss').status).toBe('NOT_RUN');
+  expect(manifest.scenario_inputs_pending.length).toBeGreaterThan(5);
+
+  await page.locator('#bellhopBufferM').fill('10000');
+  await expect(page.locator('#downloadBellhopInventory')).toBeDisabled();
+  await page.locator('#buildAcousticInventory').click();
+  await expect(page.locator('#downloadBellhopInventory')).toBeEnabled();
+});
