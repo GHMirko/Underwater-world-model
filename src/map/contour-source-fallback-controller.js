@@ -115,8 +115,7 @@ subscribeState((next, patch) => {
     Object.prototype.hasOwnProperty.call(patch, 'bathymetryGridSource') ||
     Object.prototype.hasOwnProperty.call(patch, 'bathyMode') ||
     Object.prototype.hasOwnProperty.call(patch, 'contours') ||
-    Object.prototype.hasOwnProperty.call(patch, 'contourDensity') ||
-    Object.prototype.hasOwnProperty.call(patch, 'baseMap')
+    Object.prototype.hasOwnProperty.call(patch, 'contourDensity')
   ) {
     setTimeout(applyContourSourcePolicy, 0);
   }

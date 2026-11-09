@@ -33,8 +33,7 @@ function schedule() {
 
 subscribeState((next, patch) => {
   if (
-    Object.prototype.hasOwnProperty.call(patch, 'bathyMode') ||
-    Object.prototype.hasOwnProperty.call(patch, 'baseMap')
+    Object.prototype.hasOwnProperty.call(patch, 'bathyMode')
   ) schedule();
 });
 

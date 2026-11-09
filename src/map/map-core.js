@@ -1,31 +1,11 @@
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { BASEMAPS } from './config.js';
-
-function baseStyle(baseKey = 'minimal') {
-  const base = BASEMAPS[baseKey] ?? BASEMAPS.minimal;
-  return {
-    version: 8,
-    sources: {
-      base: {
-        type: 'raster',
-        tiles: base.tiles,
-        tileSize: 256,
-        maxzoom: base.nativeMaxZoom ?? 16,
-        attribution: base.attribution
-      }
-    },
-    layers: [
-      { id: 'background', type: 'background', paint: { 'background-color': '#dce7ed' } },
-      { id: 'base', type: 'raster', source: 'base', paint: { 'raster-resampling': 'linear' } }
-    ]
-  };
-}
+import { independentMapStyle, switchLandBasemap } from './land-sea-style.js';
 
 export function createMap(container, baseKey = 'minimal') {
   const map = new maplibregl.Map({
     container,
-    style: baseStyle(baseKey),
+    style: independentMapStyle(baseKey),
     center: [24.2051, 36.62451],
     zoom: 7.1,
     minZoom: 1,
@@ -39,17 +19,14 @@ export function createMap(container, baseKey = 'minimal') {
   return map;
 }
 
+/**
+ * Change ONLY land imagery. Marine background, bathymetry, contours, AOI,
+ * predictor layers and numeric state retain their identity.
+ */
 export function setBaseMap(map, baseKey) {
-  const key = BASEMAPS[baseKey] ? baseKey : 'minimal';
-  const center = map.getCenter();
-  const zoom = map.getZoom();
-  const bearing = map.getBearing();
-  const pitch = map.getPitch();
-
-  map.setStyle(baseStyle(key));
-  map.once('style.load', () => {
-    map.jumpTo({ center, zoom, bearing, pitch });
-  });
+  if (!switchLandBasemap(map, baseKey)) {
+    map.once('style.load', () => switchLandBasemap(map, baseKey));
+  }
 }
 
 export { maplibregl };

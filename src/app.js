@@ -1,5 +1,6 @@
 import './styles.css';
 import { createMap, setBaseMap } from './map/map-core.js';
+import { initializeSeaCoastlineMask } from './map/sea-coastline-controller.js';
 import { LayerManager } from './map/layer-manager.js';
 import { AoiController } from './map/aoi-controller.js';
 import { AdaptiveContours } from './map/adaptive-contours.js';
@@ -19,7 +20,7 @@ root.innerHTML = `
 <div class="app">
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
-    <span class="badge">GitHub v0.19 Bathymetry Source Broker</span>
+    <span class="badge">GitHub v0.21 Land / Sea independent</span>
     <span class="badge">MapLibre z22 · bathymetry resolution gated</span>
     <span class="badge">Resolution-aware Data Broker</span>
   </header>
@@ -30,11 +31,16 @@ root.innerHTML = `
     </section>
     <aside class="sidebar">
       <div class="panel">
-        <h2>Map</h2>
+        <h2>Land / Terrain map</h2>
         <div class="field"><label>Base map / land</label><select id="baseMap">
           <option value="chart">Chart</option><option value="satellite">Satellite</option><option value="terrain">Terrain</option><option value="minimal">Minimal</option>
         </select></div>
-        <div class="field"><label>Bathymetry overlay · sea only</label><select id="bathyMode">
+        <div class="data-note">Land style only. Switching Minimal/Satellite does not reload the map, marine layers, AOI or numerical data.</div>
+      </div>
+      <div class="panel" id="seaMapPanel">
+        <h2>Sea / Bathymetry</h2>
+        <div id="seaMaskStatus" class="status">Coastline display mask: not initialized.</div>
+        <div class="field"><label>Bathymetry layer (independent of land)</label><select id="bathyMode">
           <option value="chart-relief">Chart Relief · sea-only</option>
           <option value="emodnet-rainbow">EMODnet Rainbow · sea-only</option>
           <option value="emodnet-multicolour">EMODnet Multicolour · Europe context</option>
@@ -117,6 +123,7 @@ root.innerHTML = `
 </div>`;
 
 const map = createMap('map', state.baseMap);
+initializeSeaCoastlineMask(map, document.querySelector('#seaMaskStatus'));
 const layers = new LayerManager(map);
 const contours = new AdaptiveContours(map, message => {
   document.querySelector('#contourStatus').textContent = message;

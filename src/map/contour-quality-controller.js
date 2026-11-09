@@ -77,7 +77,6 @@ subscribeState((next, patch) => {
     Object.prototype.hasOwnProperty.call(patch, 'bathyMode') ||
     Object.prototype.hasOwnProperty.call(patch, 'contours') ||
     Object.prototype.hasOwnProperty.call(patch, 'contourDensity') ||
-    Object.prototype.hasOwnProperty.call(patch, 'baseMap') ||
     Object.prototype.hasOwnProperty.call(patch, 'aoi')
   ) {
     try { applyQualityPolicy(); } catch { /* style graph may still be settling */ }
