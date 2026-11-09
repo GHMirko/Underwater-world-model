@@ -118,7 +118,17 @@ root.innerHTML = `
           <input id="bellhopBufferM" type="number" min="0" max="1000000" step="100" value="0">
           <small class="field-note">0 means no propagation buffer is defined. Set from expected source-receiver geometry; expansion does not imply higher input resolution.</small>
         </div>
-        <button id="buildAcousticInventory" class="btn primary" style="width:100%">Identify Bellhop3D environmental data</button>
+        <div class="field"><label>SVP: observation candidates (measured, JSON)</label>
+          <input id="svpCandidatesFile" type="file" accept=".json,application/json">
+          <small class="field-note">Use measured profiles with cast ID, lat/lon, UTC, samples depth_m / sound_speed_m_s. No profiles are invented. Automatic remote download is not yet active.</small>
+          <div id="svpCandidatesStatus" class="status">No measured SVP imported. Nearest SVP discovery remains pending.</div>
+        </div>
+        <div class="row">
+          <div class="field"><label>SVP snapshot UTC</label><input id="svpSimulationTime" type="datetime-local" step="3600"></div>
+          <div class="field"><label>Required SVP depth (m)</label><input id="svpRequiredDepth" type="number" min="1" value="100"></div>
+        </div>
+        <button id="buildAcousticInventory" class="btn primary" style="width:100%">Identify Bellhop3D environmental data and nearest SVP</button>
+        <div id="svpSelectionStatus" class="status">Nearest eligible measured SVP will be identified after import and AOI selection.</div>
         <div id="bellhopInventoryStatus" class="status">Select AOI and simulation time window, then identify all environmental inputs.</div>
         <div id="bellhopInventoryRows" class="source-candidates"></div>
         <div class="request-actions"><button id="downloadBellhopInventory" class="btn" disabled>Bellhop3D environment manifest JSON</button></div>
@@ -148,6 +158,7 @@ contours.setBathymetryMode(state.bathyMode);
 const legendEl = document.querySelector('#depthLegend');
 let currentEnvRequest = null;
 let currentAcousticInventory = null;
+let svpCandidates = [];
 
 function updateLegend() {
   renderDepthLegend(legendEl, state.bathyMode, state.bathymetry);
@@ -168,6 +179,7 @@ initialStart.setUTCMinutes(0, 0, 0);
 const initialEnd = new Date(initialStart.getTime() + 24 * 3600 * 1000);
 document.querySelector('#envStart').value = utcInputValue(initialStart);
 document.querySelector('#envEnd').value = utcInputValue(initialEnd);
+document.querySelector('#svpSimulationTime').value = utcInputValue(initialStart);
 
 document.querySelector('#envVariables').innerHTML = DEFAULT_ENVIRONMENT_SELECTION.map(id => {
   const variable = ENVIRONMENT_VARIABLES[id];
@@ -457,6 +469,32 @@ function invalidateAcousticInventory() {
 }
 
 document.querySelector('#bellhopBufferM').addEventListener('input', invalidateAcousticInventory);
+document.querySelector('#svpSimulationTime').addEventListener('change', invalidateAcousticInventory);
+document.querySelector('#svpRequiredDepth').addEventListener('input', invalidateAcousticInventory);
+document.querySelector('#svpCandidatesFile').addEventListener('change', async event => {
+  const status = document.querySelector('#svpCandidatesStatus');
+  const file = event.target.files?.[0];
+  svpCandidates = [];
+  invalidateAcousticInventory();
+  if (!file) {
+    status.textContent = 'No measured SVP imported.';
+    return;
+  }
+  try {
+    if (file.size > 2 * 1024 * 1024) throw new Error('SVP JSON exceeds 2 MB');
+    const data = JSON.parse(await file.text());
+    const candidates = Array.isArray(data) ? data : data?.profiles;
+    if (!Array.isArray(candidates) || candidates.length > 200)
+      throw new Error('Expected an array of up to 200 observed SVP casts (or {"profiles":[]})');
+    svpCandidates = candidates;
+    status.textContent = candidates.length + ' observed SVP candidate(s) imported. Proximity, time and depth QC will be assessed after AOI selection.';
+    status.className = 'status good';
+  } catch (error) {
+    svpCandidates = [];
+    status.textContent = 'SVP import error: ' + error.message;
+    status.className = 'status warn';
+  }
+});
 
 document.querySelector('#buildAcousticInventory').addEventListener('click', () => {
   const status = document.querySelector('#bellhopInventoryStatus');
@@ -469,6 +507,9 @@ document.querySelector('#buildAcousticInventory').addEventListener('click', () =
       maxDepth: Number(document.querySelector('#envMaxDepth').value),
       analysisGridM: Number(document.querySelector('#analysisGridM').value),
       propagationBufferM: Number(document.querySelector('#bellhopBufferM').value),
+      svpCandidates,
+      svpSimulationTime: document.querySelector('#svpSimulationTime').value,
+      svpRequiredDepthM: Number(document.querySelector('#svpRequiredDepth').value),
       bathymetrySelection: state.bathymetrySource,
       bathymetryDiscoveryPlan: state.bathymetryDiscoveryPlan
     });
@@ -480,6 +521,16 @@ document.querySelector('#buildAcousticInventory').addEventListener('click', () =
       plan.readiness.requested_source_jobs + ' acquisition jobs prepared · ' +
       plan.readiness.unresolved_source_jobs.length + ' source jobs unresolved · ' +
       plan.readiness.blocking_gates.length + ' validation gates open';
+    const svp = plan.nearest_svp;
+    const selected = svp.selected_cast;
+    const svpStatus = document.querySelector('#svpSelectionStatus');
+    svpStatus.className = selected ? 'status good' : 'status warn';
+    svpStatus.textContent = selected
+      ? 'Nearest eligible measured SVP: ' + selected.id + ' · ' + selected.distance_km.toFixed(1) +
+        ' km · age ' + selected.age_hours.toFixed(1) + ' h · depth ' +
+        selected.bottom_sample_depth_m + ' m · TL NOT RUN'
+      : 'No eligible observed SVP (' + svp.evaluated_profiles.length +
+        ' checked). Model-derived T/S/SSP fallback requires acquisition and QA; TL NOT RUN.';
     const rows = document.querySelector('#bellhopInventoryRows');
     rows.replaceChildren();
     for (const item of plan.inventory) {
