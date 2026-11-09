@@ -20,7 +20,7 @@ root.innerHTML = `
 <div class="app">
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
-    <span class="badge">GitHub v0.21 Land / Sea independent</span>
+    <span class="badge">GitHub v0.22 Visible sea context</span>
     <span class="badge">MapLibre z22 · bathymetry resolution gated</span>
     <span class="badge">Resolution-aware Data Broker</span>
   </header>
@@ -40,6 +40,7 @@ root.innerHTML = `
       <div class="panel" id="seaMapPanel">
         <h2>Sea / Bathymetry</h2>
         <div id="seaMaskStatus" class="status">Coastline display mask: not initialized.</div>
+        <div class="data-note" id="seaContextNote">Without an AOI, European EMODnet colour bathymetry is shown as CONTEXT ONLY. Draw an AOI to acquire real numerical data. Sea colours never derive from the selected land basemap.</div>
         <div class="field"><label>Bathymetry layer (independent of land)</label><select id="bathyMode">
           <option value="chart-relief">Chart Relief · sea-only</option>
           <option value="emodnet-rainbow">EMODnet Rainbow · sea-only</option>
