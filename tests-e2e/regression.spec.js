@@ -58,7 +58,8 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   await expect(page.locator('#fitAoi')).toBeEnabled();
   await expect(page.locator('#bathyStatus')).toContainText('REAL EMODnet');
   await expect(page.locator('#aoiDepthGridStatus')).toContainText('confidence');
-  await expect(page.locator('#depthLegend')).toBeVisible();
+  // Beyond the native bathymetric display cap the legend is intentionally hidden.
+  await expect(page.locator('#depthLegend')).toBeHidden();
   await expect(page.locator('#depthLegend')).toContainText('AOI REAL bathymetry');
   await expect(page.locator('#contourStatus')).toContainText('Adaptive isobaths');
   await expect(page.locator('#contourStatus')).toContainText('confidence');
