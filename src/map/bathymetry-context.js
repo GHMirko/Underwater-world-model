@@ -44,6 +44,14 @@ export function contextDisplayDescription(mode, center) {
       numerical: false
     };
   }
+  if (effective === 'chart-relief') {
+    return {
+      provider: 'Seascape',
+      title: 'Chart relief raster · contesto indicativo',
+      status: 'EXTERNAL_VISUAL_SOURCE',
+      numerical: false
+    };
+  }
   if (effective === 'gebco-global') {
     return {
       provider: 'GEBCO',
