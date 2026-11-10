@@ -1,5 +1,6 @@
 import './styles.css';
 import { createOperatorWorkspace } from './ui/operator-workspace.js';
+import { attachExperimentWorkspace } from './experiments/experiment-workspace.js';
 import { createMap, setBaseMap } from './map/map-core.js';
 import { initializeSeaCoastlineMask } from './map/sea-coastline-controller.js';
 import { attachPlaceSearch } from './map/place-search.js';
@@ -24,7 +25,7 @@ root.innerHTML = `
 <div class="app">
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
-    <span class="badge">GitHub v0.26 Operator Console</span>
+    <span class="badge">GitHub v0.27 Experiments / Search</span>
 
   </header>
   <div class="workspace">
@@ -71,6 +72,34 @@ root.innerHTML = `
         </select></div>
         <div id="contourStatus" class="status">Waiting for map…</div>
         <div class="data-note">Normal view uses a continuous display surface plus derived isobaths. The native numeric grid is hidden unless Debug is enabled; analytical consumers always use the numeric data layer, never the display texture.</div>
+      </div>
+
+      <div class="panel" id="experimentPanel">
+        <h2>Esperimenti / archivio dati</h2>
+        <div id="currentExperiment" class="status">Crea o apri un esperimento prima di salvare i dati.</div>
+        <div class="field"><label for="experimentName">Nome nuovo esperimento</label>
+          <input id="experimentName" type="text" maxlength="100" placeholder="Es. Catania · Scenario 001"></div>
+        <button id="createExperiment" class="btn primary" style="width:100%">＋ Crea esperimento</button>
+        <div class="field"><label for="experimentLibrary">Esperimenti disponibili su questo browser</label>
+          <select id="experimentLibrary"><option value="">Nessun esperimento selezionato</option></select></div>
+        <div class="request-actions">
+          <button id="openLocalExperiment" class="btn">Riapri dal browser</button>
+          <button id="openExperimentFolder" class="btn">Apri cartella esperimento</button>
+        </div>
+        <div class="request-actions">
+          <button id="chooseExperimentFolder" class="btn" disabled>Collega cartella sul PC</button>
+          <button id="saveExperiment" class="btn primary" disabled>Salva esperimento</button>
+        </div>
+        <div class="request-actions">
+          <button id="exportExperiment" class="btn" disabled>Esporta manifest JSON</button>
+          <label class="btn operator-file-button">Importa manifest JSON
+            <input id="importExperiment" type="file" accept=".json,application/json">
+          </label>
+        </div>
+        <div class="field"><label for="attachExperimentFiles">Allega file reali alla cartella (NetCDF, GeoTIFF, SVP, ecc.)</label>
+          <input id="attachExperimentFiles" type="file" multiple disabled></div>
+        <div id="experimentStatus" class="status">Archivio browser locale. Per conservare file e ricaricarli da altri PC collega una cartella o esporta il manifest.</div>
+        <div class="data-note">Il browser non sceglie cartelle senza una tua azione. Il salvataggio include AOI, parametri, piani, snapshot e allegati realmente importati; non scarica automaticamente le griglie Copernicus/GEBCO. Stato QA e validità temporale rimangono da verificare.</div>
       </div>
 
       <div class="panel" id="missionPanel">
@@ -665,4 +694,140 @@ subscribeState((next, patch) => {
   if (['aoi', 'bathymetrySource', 'bathymetryDiscoveryPlan'].some(key => Object.prototype.hasOwnProperty.call(patch, key))) invalidateAcousticInventory();
   if (Object.prototype.hasOwnProperty.call(patch, 'bathyMode')) queueMicrotask(updateMarineContextStatus);
 });
-window.__MSO__ = { map, layers, contours, operatorUI, aoi, state, updateLegend, fitToAoi, buildEnvironmentalRequest, buildBellhop3dEnvironmentInventory, getAcousticInventory: () => currentAcousticInventory, buildWorldModelPackage, aoiDimensionsMeters, resolutionAssessment };
+
+const experimentWorkspace = attachExperimentWorkspace({
+  root,
+  getSnapshot: () => ({
+    aoi: state.aoi,
+    view: { center: map.getCenter().toArray(), zoom: map.getZoom() },
+    mission: state.mission,
+    base_map: state.baseMap,
+    bathymetry_mode: state.bathyMode,
+    contours: state.contours,
+    contour_density: state.contourDensity,
+    bathymetry_opacity: Number(document.querySelector('#depthOpacity').value),
+    max_operating_depth_m: Number(document.querySelector('#maxDepth').value),
+    selected_assets: [...state.assets],
+    environment_controls: {
+      start_datetime: document.querySelector('#envStart').value,
+      end_datetime: document.querySelector('#envEnd').value,
+      min_depth_m: Number(document.querySelector('#envMinDepth').value),
+      max_depth_m: Number(document.querySelector('#envMaxDepth').value),
+      analysis_grid_m: Number(document.querySelector('#analysisGridM').value),
+      variables: selectedEnvironmentVariables()
+    },
+    acoustic_controls: {
+      propagation_buffer_m: Number(document.querySelector('#bellhopBufferM').value),
+      simulation_datetime: document.querySelector('#svpSimulationTime').value,
+      required_svp_depth_m: Number(document.querySelector('#svpRequiredDepth').value)
+    },
+    bathymetry_sample_3x3: state.bathymetry ?? null,
+    numeric_bathymetry_summary_only: state.bathymetryGrid ?? null,
+    bathymetry_quality_metadata: state.bathymetryQuality ?? null,
+    bathymetry_source_plan: state.bathymetryDiscoveryPlan ?? null,
+    environment_request: currentEnvRequest ?? null,
+    acoustic_inventory: currentAcousticInventory ?? null,
+    world_model_package: currentEnvRequest && state.aoi
+      ? buildWorldModelPackage({ state, environmentalRequest: currentEnvRequest }) : null,
+    svp_candidates: svpCandidates,
+    optimization_result_text: document.querySelector('#results').textContent?.trim() || null,
+    data_integrity: {
+      input_grid_files_stored: 'ONLY_IF_OPERATOR_ATTACHED_TO_EXPERIMENT_FOLDER',
+      source_jobs_executed: false,
+      acoustic_model_run: false,
+      transmission_loss_computed: false,
+      note: 'Numeric WCS layer exists only in live map unless actual GeoTIFF/NetCDF is attached. A 3x3 bathymetry sample is not an environmental model.'
+    }
+  }),
+  restoreSnapshot: snap => {
+    // Reopen configurations and AOI; network controllers may recheck remote
+    // sources. Recalled plans remain snapshots, not proof of current coverage.
+    aoi.disable();
+    aoi.setAoi(snap.aoi ?? null, { notify: false });
+    patchState({
+      aoi: snap.aoi ?? null,
+      mission: snap.mission ?? 'ASW',
+      bathymetry: snap.bathymetry_sample_3x3 ?? null,
+      baseMap: snap.base_map ?? 'minimal',
+      bathyMode: snap.bathymetry_mode ?? 'aoi-adaptive',
+      contours: snap.contours !== false,
+      contourDensity: snap.contour_density ?? 'dense',
+      bathymetryGridSource: null,
+      bathymetryGrid: null,
+      bathymetryQuality: null,
+      adaptiveContours: null,
+      bathymetryDiscoveryPlan: snap.bathymetry_source_plan ?? null,
+      assets: new Set(snap.selected_assets ?? ASSETS.map(asset=>asset.id))
+    });
+    document.querySelector('#mission').value = state.mission;
+    document.querySelector('#maxDepth').value = snap.max_operating_depth_m ?? 500;
+    document.querySelector('#baseMap').value = state.baseMap;
+    setBaseMap(map,state.baseMap);
+    document.querySelector('#bathyMode').value = state.bathyMode;
+    layers.setBathymetry(state.bathyMode);
+    contours.setBathymetryMode(state.bathyMode);
+    document.querySelector('#contours').checked = state.contours;
+    contours.setVisible(state.contours);
+    document.querySelector('#contourDensity').value = state.contourDensity;
+    contours.setDensity(state.contourDensity);
+    document.querySelector('#depthOpacity').value = snap.bathymetry_opacity ?? 72;
+    layers.setDepthOpacity(Number(document.querySelector('#depthOpacity').value)/100);
+    for(const input of document.querySelectorAll('#assets input'))input.checked=state.assets.has(input.value);
+    const c=snap.environment_controls ?? {};
+    for(const [id,key] of [['envStart','start_datetime'],['envEnd','end_datetime'],['envMinDepth','min_depth_m'],
+        ['envMaxDepth','max_depth_m'],['analysisGridM','analysis_grid_m']]){
+      if(c[key]!=null)document.querySelector('#'+id).value=c[key];
+    }
+    if(Array.isArray(c.variables))for(const input of document.querySelectorAll('#envVariables input')){
+      input.checked=c.variables.includes(input.value);
+    }
+    const acoustic=snap.acoustic_controls ?? {};
+    for(const [id,key] of [['bellhopBufferM','propagation_buffer_m'],['svpSimulationTime','simulation_datetime'],
+      ['svpRequiredDepth','required_svp_depth_m']]){
+      if(acoustic[key]!=null)document.querySelector('#'+id).value=acoustic[key];
+    }
+    svpCandidates=Array.isArray(snap.svp_candidates)?snap.svp_candidates:[];
+    document.querySelector('#svpCandidatesStatus').textContent=svpCandidates.length
+      ?svpCandidates.length+' SVP candidate recuperate dal manifest; verificare validità e osservazioni.':'Nessun SVP osservato salvato.';
+    currentEnvRequest=snap.environment_request ?? null;
+    setRequestButtons(Boolean(currentEnvRequest));
+    document.querySelector('#envRequestStatus').textContent=currentEnvRequest
+      ?'SNAPSHOT RICARICATO · piano salvato, sorgenti non riacquisite né validate'
+      :'AOI recuperata: preparare Environmental Data Request.';
+    currentAcousticInventory=snap.acoustic_inventory ?? null;
+    document.querySelector('#downloadBellhopInventory').disabled=!currentAcousticInventory;
+    document.querySelector('#bellhopInventoryStatus').textContent=currentAcousticInventory
+      ?'SNAPSHOT Bellhop3D recuperato · TL NON CALCOLATA · QA da rivalidare':'Preparare l’inventario Bellhop3D.';
+    document.querySelector('#svpSelectionStatus').textContent=currentAcousticInventory?.nearest_svp?.selected_cast
+      ?'SVP selezionato nello snapshot: '+currentAcousticInventory.nearest_svp.selected_cast.id+' · da rivalidare'
+      :'Nessun SVP misurato selezionato nello snapshot.';
+    const rows=document.querySelector('#bellhopInventoryRows');rows.replaceChildren();
+    if(currentAcousticInventory?.inventory)for(const item of currentAcousticInventory.inventory){
+      const row=document.createElement('div');row.className='source-candidate';
+      row.textContent=item.label+' · '+item.data_status+' · '+item.validation_status;
+      rows.append(row);
+    }
+    document.querySelector('#results').textContent=snap.optimization_result_text
+      ?'RISULTATO SNAPSHOT (non rieseguito): '+snap.optimization_result_text
+      :'';
+    updateAoiStatus(state.aoi);
+    renderBathymetryBroker();
+    renderSpatialAdequacy();
+    updateLegend();
+    if(snap.view?.center&&Array.isArray(snap.view.center)&&snap.view.center.length===2)
+      map.jumpTo({center:snap.view.center,zoom:snap.view.zoom??9});
+    else if(snap.aoi) fitToAoi(snap.aoi,0);
+  },
+  openMission: () => operatorUI.open('mission')
+});
+subscribeState((next,patch)=>{
+  if(['aoi','bathymetry','bathymetrySource','bathymetryGridSource','bathyMode','mission',
+      'bathymetryDiscoveryPlan'].some(k=>Object.prototype.hasOwnProperty.call(patch,k)))
+    experimentWorkspace.markDirty();
+});
+document.querySelector('#environmentPanel').addEventListener('input',()=>experimentWorkspace.markDirty());
+document.querySelector('#acousticEnvironmentPanel').addEventListener('input',()=>experimentWorkspace.markDirty());
+document.querySelector('#assets').addEventListener('change',()=>experimentWorkspace.markDirty());
+document.querySelector('#optimize').addEventListener('click',()=>experimentWorkspace.markDirty());
+
+window.__MSO__ = { map, layers, contours, operatorUI, experimentWorkspace, aoi, state, updateLegend, fitToAoi, buildEnvironmentalRequest, buildBellhop3dEnvironmentInventory, getAcousticInventory: () => currentAcousticInventory, buildWorldModelPackage, aoiDimensionsMeters, resolutionAssessment };

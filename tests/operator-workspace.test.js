@@ -6,9 +6,9 @@ test('operator workspace separates complex system controls into five mission-ori
   const sections=operatorSections();
   assert.deepEqual(sections.map(s=>s.id),['chart','mission','data','acoustic','assets']);
   const ids=sections.flatMap(s=>s.panels);
-  assert.equal(ids.length,8);
+  assert.equal(ids.length,9);
   assert.equal(new Set(ids).size,ids.length);
-  for(const id of ['landMapPanel','seaMapPanel','missionPanel','bathyBrokerPanel','environmentPanel','acousticEnvironmentPanel','assetsPanel','optimizerPanel'])
+  for(const id of ['landMapPanel','seaMapPanel','experimentPanel','missionPanel','bathyBrokerPanel','environmentPanel','acousticEnvironmentPanel','assetsPanel','optimizerPanel'])
     assert.ok(ids.includes(id));
 });
 

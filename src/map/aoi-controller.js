@@ -71,6 +71,23 @@ export class AoiController {
     return this.aoi ? { ...this.aoi } : null;
   }
 
+  // Rehydrate a saved AOI without simulating a mouse drag.
+  // The parent decides whether network data need to be reacquired.
+  setAoi(aoi, { notify = true } = {}) {
+    this.disable();
+    if (aoi != null) {
+      const keys = ['minLon', 'maxLon', 'minLat', 'maxLat'];
+      if (!keys.every(key => Number.isFinite(aoi[key])) ||
+          aoi.minLon >= aoi.maxLon || aoi.minLat >= aoi.maxLat ||
+          aoi.minLon < -180 || aoi.maxLon > 180 ||
+          aoi.minLat < -90 || aoi.maxLat > 90)
+        throw new Error('Invalid persisted AOI');
+    }
+    this.aoi = aoi ? { ...aoi } : null;
+    this._render();
+    if (notify) this.onChange(this.getAoi());
+  }
+
   _onDown(event) {
     if (!this.enabled) return;
     event.preventDefault?.();
