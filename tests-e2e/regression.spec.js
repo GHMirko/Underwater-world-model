@@ -260,7 +260,7 @@ test('v0.21 land style switch preserves the marine stack, AOI and numeric data',
 test('v0.22 renders sea context without AOI and does not reset it on land switch', async ({ page }) => {
   await expect(page.locator('#bathyMode')).toHaveValue('aoi-adaptive');
   await expect(page.locator('#aoiStatus')).toContainText('No AOI selected');
-  await expect(page.locator('#seaContextNote')).toContainText('CONTEXT ONLY');
+  await expect(page.locator('#seaContextNote')).toContainText('GEBCO 2026 globale');
   await expect.poll(async () => page.evaluate(() => Boolean(window.__MSO__.map.getLayer('bathymetry-fallback-layer'))), { timeout: 10000 }).toBe(true);
   const before = await page.evaluate(() => {
     const map = window.__MSO__.map;
@@ -411,7 +411,7 @@ test('v0.25 place search centers map without creating or changing an AOI', async
   await expect(page.locator('#placeSearchResults button')).toHaveCount(2);
   await page.locator('#placeSearchResults button').first().click();
   await expect(page.locator('#placeSearchStatus')).toContainText('AOI esistente invariata');
-  await expect.poll(async () => page.evaluate(() => window.__MSO__.map.getCenter().lng), { timeout: 10000 }).toBeGreaterThan(9.7);
+  await expect.poll(async () => page.evaluate(() => Math.abs(window.__MSO__.map.getCenter().lng - 9.83)), { timeout: 10000 }).toBeLessThan(0.05);
   const after = await page.evaluate(() => ({
     center: window.__MSO__.map.getCenter(),
     aoi: window.__MSO__.state.aoi
