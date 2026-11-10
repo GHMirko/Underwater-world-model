@@ -12,12 +12,19 @@ test.beforeEach(async ({ page }) => {
 
   await page.goto('/Underwater-world-model/');
   await expect(page.locator('#map')).toBeVisible();
-  await expect(page.locator('#aoiDepthGridStatus')).toBeVisible();
   await page.waitForTimeout(800);
+  await openPanel(page, 'chart');
+  await expect(page.locator('#aoiDepthGridStatus')).toHaveCount(1); // status may belong to another closed operator context
 });
 
+async function openPanel(page, id) {
+  const tab = page.locator('#operatorTab-' + id);
+  if ((await tab.getAttribute('aria-expanded')) !== 'true') await tab.click();
+  await expect(page.locator('#operatorPanel-' + id)).toBeVisible();
+}
+
 async function drawAoi(page, from = { x: 180, y: 180 }, to = { x: 430, y: 360 }) {
-  await page.locator('#drawAoi').click();
+  await page.locator('#quickDrawAoi').click();
   const canvas = page.locator('#map canvas').first();
   await expect(canvas).toBeVisible();
   const box = await canvas.boundingBox();
@@ -32,7 +39,7 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await expect(page.locator('.header .badge').first()).toContainText('v0.25');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.26');
   await expect(page.locator('#baseMap option')).toHaveCount(2);
   await expect(page.locator('#baseMap')).toContainText('Minimal');
   await expect(page.locator('#baseMap')).toContainText('Satellite');
@@ -153,17 +160,19 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   await expect(page.locator('#contourStatus')).toContainText('Adaptive isobaths');
 
   await expect(page.locator('#envVariables input:checked')).toHaveCount(5);
+  await openPanel(page, 'data');
   await page.locator('#analysisGridM').fill('20');
   await page.locator('#buildEnvRequest').click();
   await expect(page.locator('#envRequestStatus')).toContainText('SOURCE-RESOLVED');
   await expect(page.locator('#downloadManifest')).toBeEnabled();
   await expect(page.locator('#downloadWorldModel')).toBeEnabled();
 
+  await openPanel(page, 'assets');
   await page.locator('#optimize').click();
   await expect(page.locator('#results .result').first()).toBeVisible();
   await expect(page.locator('#results')).toContainText('Recommended');
 
-  await page.locator('#clearAoi').click();
+  await page.locator('#quickClearAoi').click();
   await expect(page.locator('#aoiStatus')).toContainText('No AOI selected');
   await expect(page.locator('#depthLegend')).toBeHidden();
   await expect(page.locator('#contourStatus')).toContainText('waiting');
@@ -322,6 +331,7 @@ test('v0.23 GEBCO context WMS remains mounted beyond native scale and labels iso
 
 
 test('v0.24 exposes all Bellhop3D environment inputs but does not claim TL run readiness', async ({ page }) => {
+  await openPanel(page, 'acoustic');
   await expect(page.locator('#acousticEnvironmentPanel')).toBeVisible();
   await page.locator('#buildAcousticInventory').click();
   await expect(page.locator('#bellhopInventoryStatus')).toContainText('Define an AOI');
@@ -351,6 +361,7 @@ test('v0.24 exposes all Bellhop3D environment inputs but does not claim TL run r
 
 test('v0.24 nearest measured SVP selection is based on AOI, depth and time with no fabricated TL', async ({ page }) => {
   await drawAoi(page);
+  await openPanel(page, 'acoustic');
   const parameters = await page.evaluate(() => {
     const aoi = window.__MSO__.state.aoi;
     return {
