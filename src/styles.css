@@ -5,3 +5,18 @@
 .bathymetry-detail-limit.limited{border-color:#efb66b;background:rgba(35,31,26,.96)}
 .bathymetry-detail-limit[hidden]{display:none}
 /* Do not suppress isobaths or depth legend on visual overzoom. */
+
+/* Location search is independent from AOI drawing and analytical data. */
+.place-search{position:absolute;z-index:8;top:10px;left:50%;transform:translateX(-50%);width:min(460px,calc(100% - 150px));padding:8px 10px;border-radius:10px;border:1px solid #42677b;background:rgba(12,30,42,.94);box-shadow:0 3px 14px #0005;color:#eef6fb}
+.place-search label{display:block;font-size:11px;font-weight:700;margin-bottom:5px}
+.place-search-controls{display:flex;gap:6px}
+.place-search input[type=search]{flex:1;min-width:0;padding:8px;border:1px solid #45667a;border-radius:7px;background:#09161e;color:#eef6fb;font-size:13px}
+.place-search-controls button{font-size:12px;min-width:70px}
+.place-search-status{font-size:10px;line-height:1.4;color:#a5c7d9;margin-top:5px}
+.place-search-status.status{border:0;padding:0;margin-top:5px}
+.place-search-results{max-height:210px;overflow:auto}
+.place-results-list{display:grid;gap:3px;padding:5px 0}
+.place-result{width:100%;text-align:left;font-size:11px;background:#1b394c}
+.place-result:hover,.place-result:focus{background:#305c72}
+.bathymetry-detail-limit{top:118px}
+@media(max-width:700px){.place-search{left:8px;transform:none;width:calc(100% - 70px)}.bathymetry-detail-limit{top:118px}}

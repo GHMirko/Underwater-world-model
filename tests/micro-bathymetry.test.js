@@ -29,9 +29,9 @@ test('HR bathymetry discovery targets the official EMODnet HR footprint layer', 
 
 test('GEBCO global context uses current GEBCO_Latest WMS layer family', () => {
   assert.equal(BATHYMETRY['gebco-global'].provider, 'gebco');
-  assert.equal(BATHYMETRY['gebco-global'].layer, 'GEBCO_Latest_2');
+  assert.equal(BATHYMETRY['gebco-global'].layer, 'gebco_latest_2');
   const url = gebcoWms();
   assert.match(url, /wms\.gebco\.net\/mapserv/);
-  assert.match(url, /GEBCO_Latest_2/);
+  assert.match(url, /gebco_latest_2/);
   assert.match(url, /EPSG%3A3857|EPSG:3857/);
 });

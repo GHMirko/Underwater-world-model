@@ -1,3 +1,4 @@
+import { automaticContextBathymetry } from './bathymetry-context.js';
 import { state, subscribeState } from '../state.js';
 import { contourDisplayAssessment } from './contour-quality.js';
 
@@ -90,6 +91,20 @@ function applyContourSourcePolicy() {
     return;
   }
 
+  // EMODnet WMS/WFS contours have no regional coverage in most of the
+  // world. Never present them as actual isolines in a GEBCO-global view.
+  if (automaticContextBathymetry(map.getCenter()) === 'gebco-global') {
+    contextFallback = false;
+    clearTimeout(ensureTimer);
+    if (contourEngine.visible) contourEngine.setVisible(false);
+    const status = statusElement();
+    if (status) {
+      status.textContent = 'GEBCO contesto globale · isobate locali non disponibili: occorre griglia numerica e derivazione delle curve.';
+      status.className = 'status warn';
+    }
+    return;
+  }
+
   contextFallback = true;
   if (contourEngine.bathymetryMode !== 'emodnet-rainbow') contourEngine.setBathymetryMode('emodnet-rainbow');
   contourEngine.setDensity(state.contourDensity);
@@ -123,6 +138,9 @@ subscribeState((next, patch) => {
 
 map.on('style.load', () => {
   if (contextFallback) scheduleContextEnsure();
+});
+map.on('moveend', () => {
+  if (state.bathyMode === 'aoi-adaptive') applyContourSourcePolicy();
 });
 
 applyContourSourcePolicy();

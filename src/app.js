@@ -1,6 +1,8 @@
 import './styles.css';
 import { createMap, setBaseMap } from './map/map-core.js';
 import { initializeSeaCoastlineMask } from './map/sea-coastline-controller.js';
+import { attachPlaceSearch } from './map/place-search.js';
+import { automaticContextBathymetry, contextDisplayDescription, regionalBathymetryRegion } from './map/bathymetry-context.js';
 import { LayerManager } from './map/layer-manager.js';
 import { AoiController } from './map/aoi-controller.js';
 import { AdaptiveContours } from './map/adaptive-contours.js';
@@ -21,13 +23,22 @@ root.innerHTML = `
 <div class="app">
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
-    <span class="badge">GitHub v0.24 Bellhop3D Environment</span>
+    <span class="badge">GitHub v0.25 Global Bathymetry / Search</span>
     <span class="badge">MapLibre z22 · bathymetry scale warning</span>
     <span class="badge">Resolution-aware Data Broker</span>
   </header>
   <div class="workspace">
     <section class="map-wrap">
       <div id="map" class="map"></div>
+      <form id="placeSearchForm" class="place-search" autocomplete="off">
+        <label for="placeQuery">Vai a un luogo</label>
+        <div class="place-search-controls">
+          <input id="placeQuery" type="search" placeholder="Es. La Spezia, Makassar, Lipari…" maxlength="120" aria-label="Cerca un luogo">
+          <button class="btn primary" type="submit">Cerca</button>
+        </div>
+        <div id="placeSearchStatus" class="place-search-status" role="status" aria-live="polite">Ricerca per nome o coordinate: lat, lon</div>
+        <div id="placeSearchResults" class="place-search-results"></div>
+      </form>
       <div id="depthLegend" class="depth-legend" aria-live="polite"></div>
     </section>
     <aside class="sidebar">
@@ -41,7 +52,8 @@ root.innerHTML = `
       <div class="panel" id="seaMapPanel">
         <h2>Sea / Bathymetry</h2>
         <div id="seaMaskStatus" class="status">Coastline display mask: not initialized.</div>
-        <div class="data-note" id="seaContextNote">Without an AOI, European EMODnet colour bathymetry is shown as CONTEXT ONLY. Draw an AOI to acquire real numerical data. Sea colours never derive from the selected land basemap.</div>
+        <div id="marineContextStatus" class="status">Rilevamento copertura GEBCO / EMODnet…</div>
+        <div class="data-note" id="seaContextNote">Contesto batimetrico automatico: GEBCO 2026 globale; EMODnet nelle regioni coperte. La carta di profondità è indicativa e distinta dai dati numerici per i predittori. Se il WMS fallisce, lo sfondo marino resta azzurro.</div>
         <div class="field"><label>Bathymetry layer (independent of land)</label><select id="bathyMode">
           <option value="chart-relief">Chart Relief · sea-only</option>
           <option value="emodnet-rainbow">EMODnet Rainbow · sea-only</option>
@@ -151,6 +163,50 @@ root.innerHTML = `
 const map = createMap('map', state.baseMap);
 initializeSeaCoastlineMask(map, document.querySelector('#seaMaskStatus'));
 const layers = new LayerManager(map);
+attachPlaceSearch({
+  form: document.querySelector('#placeSearchForm'),
+  input: document.querySelector('#placeQuery'),
+  results: document.querySelector('#placeSearchResults'),
+  status: document.querySelector('#placeSearchStatus'),
+  map
+});
+
+function updateMarineContextStatus() {
+  const status = document.querySelector('#marineContextStatus');
+  const contextMode = layers.getContextBathymetry();
+  const currentMode = state.bathyMode === 'aoi-adaptive'
+    ? (contextMode ?? automaticContextBathymetry(map.getCenter())) : state.bathyMode;
+  const description = contextDisplayDescription(currentMode, map.getCenter());
+  const isAutomatic = state.bathyMode === 'aoi-adaptive';
+  status.dataset.failedProvider = '';
+  status.textContent = (isAutomatic ? 'AUTO · ' : '') + description.title +
+    ' · WMS cartografico, non griglia numerica. ' +
+    (isAutomatic ? 'La sorgente cambia quando si naviga fuori dall’area EMODnet.' : '');
+  status.className = description.status === 'OUTSIDE_REGIONAL_COVERAGE' ? 'status warn' : 'status';
+}
+
+map.on('moveend', updateMarineContextStatus);
+map.on('load', updateMarineContextStatus);
+map.on('sourcedata', event => {
+  if (event.sourceId !== 'bathymetry-fallback-source' &&
+      event.sourceId !== 'bathymetry-source') return;
+  if (event.isSourceLoaded) {
+    const status = document.querySelector('#marineContextStatus');
+    if (status && !status.dataset.failedProvider) {
+      status.dataset.sourceLoaded = '1';
+      updateMarineContextStatus();
+      status.textContent += ' · layer WMS richiesto/caricato (qualità non verificata)';
+    }
+  }
+});
+map.on('error', event => {
+  const detail = String(event?.error?.message ?? '');
+  if (!/gebco\.net|emodnet-bathymetry\.eu|wms.*(error|fail)|source.*(gebco|emodnet)/i.test(detail)) return;
+  const status = document.querySelector('#marineContextStatus');
+  status.dataset.failedProvider = '1';
+  status.className = 'status warn';
+  status.textContent = 'Servizio batimetrico WMS non raggiungibile. Lo sfondo azzurro NON rappresenta la profondità. ' + detail.slice(0, 150);
+});
 const contours = new AdaptiveContours(map, message => {
   document.querySelector('#contourStatus').textContent = message;
 });
@@ -308,6 +364,13 @@ async function onAoiChanged(aoiValue) {
   fitToAoi(aoiValue);
 
   const status = document.querySelector('#bathyStatus');
+  const center = { lng: (aoiValue.minLon + aoiValue.maxLon) / 2,
+    lat: (aoiValue.minLat + aoiValue.maxLat) / 2 };
+  if (!regionalBathymetryRegion(center)) {
+    status.textContent = 'AOI fuori copertura EMODnet DTM: GEBCO è contesto visivo. Per il World Model serve acquisire una griglia numerica globale/locale.';
+    status.className = 'status warn';
+    return;
+  }
   status.textContent = 'Retrieving numeric EMODnet bathymetry…';
   status.className = 'status warn';
   try {
@@ -362,6 +425,7 @@ document.querySelector('#baseMap').addEventListener('change', event => {
 });
 
 document.querySelector('#bathyMode').addEventListener('change', event => {
+  queueMicrotask(updateMarineContextStatus);
   patchState({ bathyMode: event.target.value });
   layers.setBathymetry(event.target.value);
   contours.setBathymetryMode(event.target.value);
@@ -597,5 +661,6 @@ renderBathymetryBroker();
 subscribeState((next, patch) => {
   if (Object.prototype.hasOwnProperty.call(patch, 'bathymetrySource') && next.aoi) renderBathymetryBroker();
   if (['aoi', 'bathymetrySource', 'bathymetryDiscoveryPlan'].some(key => Object.prototype.hasOwnProperty.call(patch, key))) invalidateAcousticInventory();
+  if (Object.prototype.hasOwnProperty.call(patch, 'bathyMode')) queueMicrotask(updateMarineContextStatus);
 });
 window.__MSO__ = { map, layers, contours, aoi, state, updateLegend, fitToAoi, buildEnvironmentalRequest, buildBellhop3dEnvironmentInventory, getAcousticInventory: () => currentAcousticInventory, buildWorldModelPackage, aoiDimensionsMeters, resolutionAssessment };
