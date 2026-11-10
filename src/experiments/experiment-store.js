@@ -71,7 +71,7 @@ export function parseExperimentDocument(value) {
       imported_at_utc:String(file.imported_at_utc||''),
       classification:'UNVALIDATED_OPERATOR_INPUT'
     })),
-    storage:{browser:'INDEXEDDB',folder:'RECONNECT_REQUIRED'},
+    storage:{browser:'INDEXEDDB',folder:['LINKED','NOT_LINKED','RECONNECT_REQUIRED'].includes(value.storage?.folder)?value.storage.folder:'RECONNECT_REQUIRED'},
     notes:String(value.notes||'')
   };
 }
