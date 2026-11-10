@@ -50,7 +50,9 @@ export function placeSearchUrl(query, endpoint = PLACE_SEARCH_ENDPOINT) {
   const url = new URL(endpoint);
   url.searchParams.set('q', clean);
   url.searchParams.set('limit', '5');
-  url.searchParams.set('lang', 'it');
+  // Public Photon instances may return HTTP 400 for unsupported lang=it.
+  // Omit language: the provider falls back to its configured languages.
+  // The query remains the original Italian place name.
   return url.toString();
 }
 
@@ -74,6 +76,37 @@ export function attachPlaceSearch({ form, input, results, status, map, fetchImpl
   if (!form || !input || !results || !status || !map) throw new Error('Missing place-search UI or map');
   let pending = null;
   const submit = form.querySelector('button[type=submit]');
+  const handle = form.querySelector('label[for="placeQuery"]');
+  const container = form.parentElement;
+  let drag = null;
+  function onDragStart(event) {
+    if (!handle || !container || event.button !== 0) return;
+    const rect = form.getBoundingClientRect();
+    const bounds = container.getBoundingClientRect();
+    form.style.left = (rect.left - bounds.left) + 'px';
+    form.style.top = (rect.top - bounds.top) + 'px';
+    form.style.transform = 'none';
+    drag = { pointer: event.pointerId, dx: event.clientX - rect.left, dy: event.clientY - rect.top };
+    handle.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  }
+  function onDragMove(event) {
+    if (!drag || event.pointerId !== drag.pointer) return;
+    const bounds = container.getBoundingClientRect();
+    const maxX = Math.max(0, bounds.width - form.offsetWidth);
+    const maxY = Math.max(0, bounds.height - form.offsetHeight);
+    const x = Math.max(0, Math.min(maxX, event.clientX - bounds.left - drag.dx));
+    const y = Math.max(0, Math.min(maxY, event.clientY - bounds.top - drag.dy));
+    form.style.left = x + 'px';
+    form.style.top = y + 'px';
+  }
+  function onDragEnd(event) {
+    if (drag && drag.pointer === event.pointerId) drag = null;
+  }
+  handle?.addEventListener('pointerdown', onDragStart);
+  handle?.addEventListener('pointermove', onDragMove);
+  handle?.addEventListener('pointerup', onDragEnd);
+  handle?.addEventListener('pointercancel', onDragEnd);
 
   function message(text, kind = '') {
     status.textContent = text;
@@ -138,5 +171,9 @@ export function attachPlaceSearch({ form, input, results, status, map, fetchImpl
   return () => {
     pending?.abort();
     form.removeEventListener('submit', onSubmit);
+    handle?.removeEventListener('pointerdown', onDragStart);
+    handle?.removeEventListener('pointermove', onDragMove);
+    handle?.removeEventListener('pointerup', onDragEnd);
+    handle?.removeEventListener('pointercancel', onDragEnd);
   };
 }
