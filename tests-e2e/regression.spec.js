@@ -12,9 +12,9 @@ test.beforeEach(async ({ page }) => {
 
   await page.goto('/Underwater-world-model/');
   await expect(page.locator('#map')).toBeVisible();
-  await expect(page.locator('#aoiDepthGridStatus')).toBeVisible();
   await page.waitForTimeout(800);
   await openPanel(page, 'chart');
+  await expect(page.locator('#aoiDepthGridStatus')).toBeVisible();
 });
 
 async function openPanel(page, id) {
