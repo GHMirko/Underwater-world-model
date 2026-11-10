@@ -162,6 +162,12 @@ async function ensureSubdir(dir,parts){
   for(const name of parts)current=await current.getDirectoryHandle(name,{create:true});
   return current;
 }
+async function clearGeneratedFile(dir,parts,name){
+  const target=await ensureSubdir(dir,parts);
+  try{await target.removeEntry(name);}catch(error){
+    if(error?.name!=='NotFoundError')throw error;
+  }
+}
 export async function saveExperimentFolder(dir,doc){
   const parsed=parseExperimentDocument(doc);
   await Promise.all([
@@ -173,6 +179,11 @@ export async function saveExperimentFolder(dir,doc){
     ensureSubdir(dir,['results'])
   ]);
   const snapshot=parsed.snapshot;
+  if(!snapshot.aoi) await clearGeneratedFile(dir,[],'aoi.geojson');
+  if(!snapshot.environment_request)await clearGeneratedFile(dir,['world-model'],'environmental-request.json');
+  if(!snapshot.world_model_package)await clearGeneratedFile(dir,['world-model'],'world-model-package.json');
+  if(!snapshot.acoustic_inventory)await clearGeneratedFile(dir,['acoustic'],'bellhop3d-environment.json');
+  if(!snapshot.svp_candidates?.length)await clearGeneratedFile(dir,['inputs','raw'],'svp-observations-imported.json');
   if(snapshot.aoi){
     const aoi=snapshot.aoi;
     await writeFile(dir,'aoi.geojson',JSON.stringify({
