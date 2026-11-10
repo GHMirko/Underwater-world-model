@@ -100,3 +100,13 @@
  .operator-workspace .depth-legend{bottom:132px}
  .operator-workspace .place-search{width:min(410px,calc(100% - 40px));left:8px;top:8px;transform:none}
 }
+
+
+/* The global place search must remain usable when a context drawer is open. */
+@media(min-width:701px){
+ .operator-workspace:has(.operator-drawer:not([hidden])) .place-search{
+   left:calc((100% - 440px)/2);
+   width:min(420px,calc(100% - 470px));
+   transform:translateX(-50%);
+ }
+}
