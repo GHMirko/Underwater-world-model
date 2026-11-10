@@ -32,7 +32,7 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await expect(page.locator('.header .badge').first()).toContainText('v0.24');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.25');
   await expect(page.locator('#baseMap option')).toHaveCount(2);
   await expect(page.locator('#baseMap')).toContainText('Minimal');
   await expect(page.locator('#baseMap')).toContainText('Satellite');
@@ -392,4 +392,58 @@ test('v0.24 nearest measured SVP selection is based on AOI, depth and time with 
   expect(manifest.svp_forecast_adaptation.detection_range).toBe('UNDEFINED_WITHOUT_SENSOR_AND_DETECTION_CRITERION');
   expect(manifest.readiness.status).toBe('NOT_READY');
   await expect(page.locator('#downloadBellhopInventory')).toBeEnabled();
+});
+
+
+test('v0.25 place search centers map without creating or changing an AOI', async ({ page }) => {
+  await page.route('https://photon.komoot.io/api?**', route => {
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      type: 'FeatureCollection', features: [
+        { type:'Feature', geometry: {type:'Point', coordinates:[9.83, 44.105]}, properties:{name:'La Spezia', country:'Italia', osm_id:123, osm_type:'N', osm_value:'city'} },
+        { type:'Feature', geometry: {type:'Point', coordinates:[9.89, 44.1]}, properties:{name:'Porto di La Spezia', country:'Italia', osm_id:456, osm_type:'W', osm_value:'harbour'} }
+      ]
+    }) });
+  });
+
+  await expect(page.locator('#aoiStatus')).toContainText('No AOI selected');
+  await page.locator('#placeQuery').fill('La Spezia');
+  await page.locator('#placeSearchForm button[type=submit]').click();
+  await expect(page.locator('#placeSearchResults button')).toHaveCount(2);
+  await page.locator('#placeSearchResults button').first().click();
+  await expect(page.locator('#placeSearchStatus')).toContainText('AOI esistente invariata');
+  await expect.poll(async () => page.evaluate(() => window.__MSO__.map.getCenter().lng), { timeout: 10000 }).toBeGreaterThan(9.7);
+  const after = await page.evaluate(() => ({
+    center: window.__MSO__.map.getCenter(),
+    aoi: window.__MSO__.state.aoi
+  }));
+  expect(after.center.lng).toBeCloseTo(9.83,1);
+  expect(after.center.lat).toBeCloseTo(44.105,1);
+  expect(after.aoi).toBeNull();
+});
+
+test('v0.25 AOI REAL selects global GEBCO in Malaysia and EMODnet in Europe', async ({ page }) => {
+  await expect(page.locator('#bathyMode')).toHaveValue('aoi-adaptive');
+  await page.evaluate(() => window.__MSO__.map.jumpTo({ center:[119.2,0.9], zoom:8 }));
+  await expect.poll(async () => page.evaluate(() => window.__MSO__.layers.getContextBathymetry()), { timeout: 8000 }).toBe('gebco-global');
+  await expect(page.locator('#marineContextStatus')).toContainText('GEBCO 2026');
+  const sea = await page.evaluate(() => {
+    const map = window.__MSO__.map;
+    return {
+      source: map.getSource('bathymetry-fallback-source')?.serialize(),
+      layer: Boolean(map.getLayer('bathymetry-fallback-layer')),
+      mode: window.__MSO__.state.bathyMode,
+      aoi: window.__MSO__.state.aoi,
+      seaMask: Boolean(map.getLayer('sea-water-background'))
+    };
+  });
+  expect(sea.layer).toBe(true);
+  expect(sea.source.tiles[0]).toContain('wms.gebco.net');
+  expect(sea.source.tiles[0]).toContain('gebco_latest_2');
+  expect(sea.source.maxzoom).toBe(11);
+  expect(sea.mode).toBe('aoi-adaptive');
+  expect(sea.aoi).toBeNull();
+  expect(sea.seaMask).toBe(true);
+  await page.evaluate(() => window.__MSO__.map.jumpTo({center:[15,43],zoom:8}));
+  await expect.poll(async () => page.evaluate(() => window.__MSO__.layers.getContextBathymetry()), { timeout: 8000 }).toBe('emodnet-multicolour');
+  await expect(page.locator('#marineContextStatus')).toContainText('EMODnet regional');
 });
