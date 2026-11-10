@@ -18,10 +18,15 @@ export class LayerManager {
     this.map = map;
     this.bathyMode = 'chart-relief';
     this._mountedBathyMode = null;
+    this._mountedContextMode = null;
     this.depthOpacity = 0.72;
     this._restoreTimers = new Set();
     this._styleHandler = () => this._scheduleRestore();
     map.on('style.load', this._styleHandler);
+    this._moveHandler = () => {
+      if (this.bathyMode === 'aoi-adaptive') this.renderBathymetry();
+    };
+    map.on('moveend', this._moveHandler);
   }
 
   setBathymetry(mode) {
@@ -83,7 +88,8 @@ export class LayerManager {
     // layers. The base layer proves that the style graph exists.
     if (!map.getLayer('background')) return false;
 
-    const stack = visualBathymetryStack(this.bathyMode);
+    const stack = visualBathymetryStack(this.bathyMode, this.map.getCenter?.() ?? null);
+    const contextMode = stack.length > 1 ? stack[0] : null;
     const primaryExpected = Boolean(BATHYMETRY[this.bathyMode]?.layer);
     const fallbackExpected = stack.length > 1;
     // Several view-mode controllers can request the same bathymetry while
@@ -91,26 +97,28 @@ export class LayerManager {
     // the user could otherwise see a blank flash or lose layer identity
     // during a land-only basemap switch.
     if (this._mountedBathyMode === this.bathyMode &&
+        this._mountedContextMode === contextMode &&
         Boolean(map.getLayer(IDS.bathyLayer)) === primaryExpected &&
         Boolean(map.getLayer(IDS.fallbackLayer)) === fallbackExpected) return true;
 
     this._clearBathymetry();
     this._mountedBathyMode = null;
+    this._mountedContextMode = null;
 
     if (!stack.length) { this._mountedBathyMode = this.bathyMode; return true; }
 
     if (stack.length > 1) {
       const fallbackSpec = BATHYMETRY[stack[0]];
-      if (fallbackSpec?.provider === 'emodnet') {
-        this._addEmodnetRaster(
-          IDS.fallbackSource,
-          IDS.fallbackLayer,
-          fallbackSpec.layer,
-          this.depthOpacity
-        );
+      if (fallbackSpec?.provider === 'emodnet' || fallbackSpec?.provider === 'gebco') {
+        if (fallbackSpec.provider === 'gebco') {
+          this._addGebcoRaster(IDS.fallbackSource, IDS.fallbackLayer, fallbackSpec.layer, this.depthOpacity);
+        } else {
+          this._addEmodnetRaster(IDS.fallbackSource, IDS.fallbackLayer, fallbackSpec.layer, this.depthOpacity);
+        }
       }
     }
 
+    this._mountedContextMode = contextMode;
     const spec = BATHYMETRY[this.bathyMode] ?? BATHYMETRY['chart-relief'];
     if (!spec.layer) { this._mountedBathyMode = this.bathyMode; return true; }
 
@@ -189,8 +197,13 @@ export class LayerManager {
     this._scheduleRestore();
   }
 
+  getContextBathymetry() {
+    return this._mountedContextMode;
+  }
+
   destroy() {
     this.map.off('style.load', this._styleHandler);
+    this.map.off('moveend', this._moveHandler);
     for (const timer of this._restoreTimers) clearTimeout(timer);
     this._restoreTimers.clear();
     this._clearBathymetry();
