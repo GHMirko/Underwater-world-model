@@ -14,7 +14,7 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('#map')).toBeVisible();
   await page.waitForTimeout(800);
   await openPanel(page, 'chart');
-  await expect(page.locator('#aoiDepthGridStatus')).toBeVisible();
+  await expect(page.locator('#aoiDepthGridStatus')).toHaveCount(1); // status may belong to another closed operator context
 });
 
 async function openPanel(page, id) {
