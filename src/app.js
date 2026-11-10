@@ -1,4 +1,5 @@
 import './styles.css';
+import { createOperatorWorkspace } from './ui/operator-workspace.js';
 import { createMap, setBaseMap } from './map/map-core.js';
 import { initializeSeaCoastlineMask } from './map/sea-coastline-controller.js';
 import { attachPlaceSearch } from './map/place-search.js';
@@ -23,9 +24,8 @@ root.innerHTML = `
 <div class="app">
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
-    <span class="badge">GitHub v0.25 Global Bathymetry / Search</span>
-    <span class="badge">MapLibre z22 · bathymetry scale warning</span>
-    <span class="badge">Resolution-aware Data Broker</span>
+    <span class="badge">GitHub v0.26 Operator Console</span>
+
   </header>
   <div class="workspace">
     <section class="map-wrap">
@@ -42,7 +42,7 @@ root.innerHTML = `
       <div id="depthLegend" class="depth-legend" aria-live="polite"></div>
     </section>
     <aside class="sidebar">
-      <div class="panel">
+      <div class="panel" id="landMapPanel">
         <h2>Land / Terrain map</h2>
         <div class="field"><label>Base map / land</label><select id="baseMap">
           <option value="chart">Chart</option><option value="satellite">Satellite</option><option value="terrain">Terrain</option><option value="minimal">Minimal</option>
@@ -72,7 +72,7 @@ root.innerHTML = `
         <div class="data-note">Normal view uses a continuous display surface plus derived isobaths. The native numeric grid is hidden unless Debug is enabled; analytical consumers always use the numeric data layer, never the display texture.</div>
       </div>
 
-      <div class="panel">
+      <div class="panel" id="missionPanel">
         <h2>Mission & AOI</h2>
         <div class="row">
           <button id="drawAoi" class="btn primary">Draw AOI</button>
@@ -147,12 +147,12 @@ root.innerHTML = `
         <div class="data-note">Critical distinction: seabed sediment class ≠ geoacoustic coefficients; T/S ≠ validated SSP; visual bathymetry ≠ numeric grid. Bellhop3D run and Transmission Loss remain blocked until source data and scenario are validated.</div>
       </div>
 
-      <div class="panel">
+      <div class="panel" id="assetsPanel">
         <h2>Assets</h2>
         <div id="assets" class="assets"></div>
       </div>
 
-      <div class="panel">
+      <div class="panel" id="optimizerPanel">
         <button id="optimize" class="btn primary" style="width:100%">Run Pareto optimizer</button>
         <div id="results" class="results" style="margin-top:8px"></div>
       </div>
@@ -161,6 +161,7 @@ root.innerHTML = `
 </div>`;
 
 const map = createMap('map', state.baseMap);
+const operatorUI = createOperatorWorkspace({ root, map, state, subscribeState });
 initializeSeaCoastlineMask(map, document.querySelector('#seaMaskStatus'));
 const layers = new LayerManager(map);
 attachPlaceSearch({
@@ -663,4 +664,4 @@ subscribeState((next, patch) => {
   if (['aoi', 'bathymetrySource', 'bathymetryDiscoveryPlan'].some(key => Object.prototype.hasOwnProperty.call(patch, key))) invalidateAcousticInventory();
   if (Object.prototype.hasOwnProperty.call(patch, 'bathyMode')) queueMicrotask(updateMarineContextStatus);
 });
-window.__MSO__ = { map, layers, contours, aoi, state, updateLegend, fitToAoi, buildEnvironmentalRequest, buildBellhop3dEnvironmentInventory, getAcousticInventory: () => currentAcousticInventory, buildWorldModelPackage, aoiDimensionsMeters, resolutionAssessment };
+window.__MSO__ = { map, layers, contours, operatorUI, aoi, state, updateLegend, fitToAoi, buildEnvironmentalRequest, buildBellhop3dEnvironmentInventory, getAcousticInventory: () => currentAcousticInventory, buildWorldModelPackage, aoiDimensionsMeters, resolutionAssessment };
