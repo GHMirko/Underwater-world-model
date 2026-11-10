@@ -9,10 +9,17 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/Underwater-world-model/');
   await expect(page.locator('#map')).toBeVisible();
   await page.waitForTimeout(1200);
+  await openPanel(page, 'chart');
 });
 
+async function openPanel(page, id) {
+  const tab = page.locator('#operatorTab-' + id);
+  if ((await tab.getAttribute('aria-expanded')) !== 'true') await tab.click();
+  await expect(page.locator('#operatorPanel-' + id)).toBeVisible();
+}
+
 async function drawAoi(page) {
-  await page.locator('#drawAoi').click();
+  await page.locator('#quickDrawAoi').click();
   const canvas = page.locator('#map canvas').first();
   const box = await canvas.boundingBox();
   await page.mouse.move(box.x + 170, box.y + 160);
@@ -23,7 +30,7 @@ async function drawAoi(page) {
 }
 
 test('AOI adaptive mode keeps EMODnet context isobaths before AOI and when local crossing is unavailable', async ({ page }) => {
-  await expect(page.locator('.header .badge').first()).toContainText('v0.25');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.26');
   await expect(page.locator('#bathyMode')).toHaveValue('aoi-adaptive');
   await expect(page.locator('#contours')).toBeChecked();
   await expect(page.locator('#contourStatus')).toContainText('CONTEXT ONLY');
