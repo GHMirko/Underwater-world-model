@@ -2,7 +2,7 @@ import './styles.css';
 import { createMap, setBaseMap } from './map/map-core.js';
 import { initializeSeaCoastlineMask } from './map/sea-coastline-controller.js';
 import { attachPlaceSearch } from './map/place-search.js';
-import { contextDisplayDescription, regionalBathymetryRegion } from './map/bathymetry-context.js';
+import { automaticContextBathymetry, contextDisplayDescription, regionalBathymetryRegion } from './map/bathymetry-context.js';
 import { LayerManager } from './map/layer-manager.js';
 import { AoiController } from './map/aoi-controller.js';
 import { AdaptiveContours } from './map/adaptive-contours.js';
@@ -175,9 +175,10 @@ function updateMarineContextStatus() {
   const status = document.querySelector('#marineContextStatus');
   const contextMode = layers.getContextBathymetry();
   const currentMode = state.bathyMode === 'aoi-adaptive'
-    ? (contextMode ?? 'aoi-adaptive') : state.bathyMode;
+    ? (contextMode ?? automaticContextBathymetry(map.getCenter())) : state.bathyMode;
   const description = contextDisplayDescription(currentMode, map.getCenter());
   const isAutomatic = state.bathyMode === 'aoi-adaptive';
+  status.dataset.failedProvider = '';
   status.textContent = (isAutomatic ? 'AUTO · ' : '') + description.title +
     ' · WMS cartografico, non griglia numerica. ' +
     (isAutomatic ? 'La sorgente cambia quando si naviga fuori dall’area EMODnet.' : '');
