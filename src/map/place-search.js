@@ -58,10 +58,11 @@ export async function lookupPlaces(query, { fetchImpl = fetch, endpoint = PLACE_
   const coordinate = parseCoordinateCenter(query);
   if (coordinate) return [coordinate];
   // Intentional single user-triggered search, never on keystrokes.
+  const url = placeSearchUrl(query, endpoint);
   const now = Date.now();
   if (now - lastRemoteRequest < RATE_LIMIT_MS) throw new Error('Attendi un secondo prima di una nuova ricerca.');
   lastRemoteRequest = now;
-  const response = await fetchImpl(placeSearchUrl(query, endpoint), { signal, credentials: 'omit', mode: 'cors' });
+  const response = await fetchImpl(url, { signal, credentials: 'omit', mode: 'cors' });
   if (!response.ok) {
     if (response.status === 429) throw new Error('Limite del servizio di ricerca raggiunto. Riprova più tardi.');
     throw new Error(`Servizio di ricerca non disponibile (HTTP ${response.status}).`);
@@ -76,7 +77,7 @@ export function attachPlaceSearch({ form, input, results, status, map, fetchImpl
 
   function message(text, kind = '') {
     status.textContent = text;
-    status.className = kind ? 'status ' + kind : 'status';
+    status.className = 'place-search-status' + (kind ? ' status ' + kind : '');
   }
 
   function openPlace(place) {
@@ -96,12 +97,13 @@ export function attachPlaceSearch({ form, input, results, status, map, fetchImpl
     const query = input.value.trim();
     if (!query) { message('Inserisci il nome di un luogo.', 'warn'); return; }
     if (pending) pending.abort();
-    pending = new AbortController();
+    const currentRequest = new AbortController();
+    pending = currentRequest;
     results.replaceChildren();
     if (submit) submit.disabled = true;
     message('Ricerca geografica…');
     try {
-      const candidates = await lookupPlaces(query, { fetchImpl, signal: pending.signal });
+      const candidates = await lookupPlaces(query, { fetchImpl, signal: currentRequest.signal });
       if (!candidates.length) {
         message('Nessun luogo trovato. Prova con un nome più specifico.', 'warn');
         return;
@@ -125,8 +127,10 @@ export function attachPlaceSearch({ form, input, results, status, map, fetchImpl
     } catch (error) {
       if (error?.name !== 'AbortError') message(error?.message || 'Ricerca non disponibile.', 'warn');
     } finally {
-      if (submit) submit.disabled = false;
-      pending = null;
+      if (pending === currentRequest) {
+        if (submit) submit.disabled = false;
+        pending = null;
+      }
     }
   }
 
