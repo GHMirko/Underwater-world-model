@@ -29,7 +29,8 @@ test('v0.27 saves an experiment with AOI in browser storage and reopens it after
   await page.reload();
   await expect(page.locator('#operatorAoiState')).toHaveText('NON DEFINITA');
   await page.locator('#operatorTab-mission').click();
-  await page.locator('#experimentLibrary').selectOption({label:/Catania Area 001/});
+  const optionValue = await page.locator('#experimentLibrary option').filter({hasText:'Catania Area 001'}).getAttribute('value');
+  await page.locator('#experimentLibrary').selectOption(optionValue);
   await page.locator('#openLocalExperiment').click();
   await expect(page.locator('#activeExperimentName')).toHaveText('Catania Area 001');
   await expect(page.locator('#operatorAoiState')).toHaveText('DEFINITA');
