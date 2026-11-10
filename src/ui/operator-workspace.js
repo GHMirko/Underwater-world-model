@@ -2,7 +2,7 @@
 /** Operator console. Reparent existing control panels without cloning any ID. */
 const GROUPS = [
   {id:'chart',name:'Carta',subtitle:'Terra e batimetria',symbol:'◫',panels:['landMapPanel','seaMapPanel']},
-  {id:'mission',name:'Missione',subtitle:'Area operativa e task',symbol:'⌖',panels:['missionPanel']},
+  {id:'mission',name:'Missione',subtitle:'Esperimenti e area operativa',symbol:'⌖',panels:['experimentPanel','missionPanel']},
   {id:'data',name:'Dati',subtitle:'Fonti e World Model',symbol:'▤',panels:['bathyBrokerPanel','environmentPanel']},
   {id:'acoustic',name:'Acustica',subtitle:'Ambiente e Bellhop3D',symbol:'◉',panels:['acousticEnvironmentPanel']},
   {id:'assets',name:'Assetti',subtitle:'Assetti e ottimizzazione',symbol:'⤨',panels:['assetsPanel','optimizerPanel']}
@@ -80,7 +80,7 @@ export function createOperatorWorkspace({root,map,state,subscribeState}) {
   const status=el('div','operator-statusbar');
   status.id='operatorStatusBar';
   status.setAttribute('aria-label','Stato sistemi');
-  for(const [id,tag] of [['operatorAoiState','AOI'],['operatorBathyState','BATIMETRIA'],['operatorDataState','WORLD MODEL'],['operatorAcousticState','BELLHOP3D']]) {
+  for(const [id,tag] of [['activeExperimentName','ESPERIMENTO'],['activeExperimentDirty','SALVATAGGIO'],['operatorAoiState','AOI'],['operatorBathyState','BATIMETRIA'],['operatorDataState','WORLD MODEL'],['operatorAcousticState','BELLHOP3D']]) {
     const item=el('div','operator-status-item');
     item.append(el('span','operator-status-tag',tag));
     const val=el('strong','operator-status-value','IN ATTESA');val.id=id;item.append(val);
