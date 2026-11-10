@@ -1,3 +1,5 @@
+import { automaticContextBathymetry } from './bathymetry-context.js';
+
 export const BASEMAPS = {
   minimal: {
     name: 'Minimal',
@@ -43,7 +45,7 @@ export const BATHYMETRY = {
   },
   'gebco-global': {
     name: 'GEBCO 2026 · global context WMS',
-    layer: 'GEBCO_Latest_2',
+    layer: 'gebco_latest_2',
     provider: 'gebco',
     // No same-source GEBCO isolines currently available in the viewer.
     // Offer distinctly labelled EMODnet context contours in European seas.
@@ -62,11 +64,11 @@ export function contourFamilyForBathymetry(mode) {
   return (BATHYMETRY[mode] ?? BATHYMETRY.none).contourFamily;
 }
 
-export function visualBathymetryStack(mode) {
+export function visualBathymetryStack(mode, center = null) {
   // AOI REAL has no display raster until its numeric data arrives.
   // Keep an independent, explicitly contextual EMODnet background visible
   // outside the AOI and before an AOI is drawn. This is NOT AOI data.
-  if (mode === 'aoi-adaptive') return ['emodnet-multicolour', 'aoi-adaptive'];
+  if (mode === 'aoi-adaptive') return [center ? automaticContextBathymetry(center) : 'emodnet-multicolour', 'aoi-adaptive'];
   const selected = BATHYMETRY[mode] ?? BATHYMETRY.none;
   if (!selected.layer) return [];
   if (!selected.visualFallback) return [mode];
@@ -77,7 +79,7 @@ export function emodnetWms(layer) {
   return `https://ows.emodnet-bathymetry.eu/wms?service=WMS&request=GetMap&version=1.1.1&layers=${encodeURIComponent(layer)}&styles=&format=image/png&transparent=true&tiled=false&width=256&height=256&srs=EPSG:3857&bbox={bbox-epsg-3857}`;
 }
 
-export function gebcoWms(layer = 'GEBCO_Latest_2') {
+export function gebcoWms(layer = 'gebco_latest_2') {
   return `https://wms.gebco.net/mapserv?service=WMS&request=GetMap&version=1.1.1&layers=${encodeURIComponent(layer)}&styles=&format=image/png&transparent=true&width=256&height=256&srs=EPSG:3857&bbox={bbox-epsg-3857}`;
 }
 
