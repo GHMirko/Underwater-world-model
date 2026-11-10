@@ -45,7 +45,7 @@ root.innerHTML = `
       <div class="panel" id="landMapPanel">
         <h2>Land / Terrain map</h2>
         <div class="field"><label>Base map / land</label><select id="baseMap">
-          <option value="chart">Chart</option><option value="satellite">Satellite</option><option value="terrain">Terrain</option><option value="minimal">Minimal</option>
+          <option value="minimal">Minimal</option><option value="satellite">Satellite</option>
         </select></div>
         <div class="data-note">Land style only. Switching Minimal/Satellite does not reload the map, marine layers, AOI or numerical data.</div>
       </div>
@@ -55,6 +55,7 @@ root.innerHTML = `
         <div id="marineContextStatus" class="status">Rilevamento copertura GEBCO / EMODnet…</div>
         <div class="data-note" id="seaContextNote">Contesto batimetrico automatico: GEBCO 2026 globale; EMODnet nelle regioni coperte. La carta di profondità è indicativa e distinta dai dati numerici per i predittori. Se il WMS fallisce, lo sfondo marino resta azzurro.</div>
         <div class="field"><label>Bathymetry layer (independent of land)</label><select id="bathyMode">
+          <option value="aoi-adaptive">AOI REAL · contesto automatico</option>
           <option value="chart-relief">Chart Relief · sea-only</option>
           <option value="emodnet-rainbow">EMODnet Rainbow · sea-only</option>
           <option value="emodnet-multicolour">EMODnet Multicolour · Europe context</option>
