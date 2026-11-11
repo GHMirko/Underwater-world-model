@@ -132,7 +132,7 @@ function ensureSurface(map) {
       paint: { 'raster-opacity': currentOpacity(), 'raster-resampling': 'linear', 'raster-fade-duration': 0 }
     }, before);
   }
-  map.setLayoutProperty(SURFACE_LAYER, 'visibility', state.bathyMode === 'aoi-adaptive' ? 'visible' : 'none');
+  map.setLayoutProperty(SURFACE_LAYER, 'visibility', 'none'); // Never paint AOI interpolated raster over land.
   map.setPaintProperty(SURFACE_LAYER, 'raster-opacity', currentOpacity());
   if (map.getLayer('aoi-line')) map.moveLayer('aoi-line');
   return true;
@@ -146,26 +146,14 @@ function applyDebugVisibility(map) {
 }
 
 function buildFromMap(map) {
-  if (state.bathymetryGridSource !== 'EMODNET_WCS' || state.bathyMode !== 'aoi-adaptive') {
-    if (map.getLayer(SURFACE_LAYER)) map.setLayoutProperty(SURFACE_LAYER, 'visibility', 'none');
-    applyDebugVisibility(map);
-    return;
-  }
-  if (!map.getSource(WCS_SOURCE)) return;
-  const features = map.querySourceFeatures(WCS_SOURCE);
-  const grid = sourceFeaturesToGrid(features);
-  if (!grid) return;
-  const surface = interpolateBathymetrySurface(grid, { width: 560 });
-  if (!surface.rendered_pixels) return;
-  surfaceUrl = surfaceToDataUrl(surface);
-  surfaceMeta = surface;
-  ensureSurface(map);
+  // The system retains numeric grids in memory for physics and contour
+  // derivation but NEVER renders an interpolated raster on top of land.
+  if (map.getLayer(SURFACE_LAYER)) map.setLayoutProperty(SURFACE_LAYER, 'visibility', 'none');
   applyDebugVisibility(map);
   const status = surfaceStatusElement();
   if (status) {
-    const uncertainty = surface.rendered_pixels ? Math.round(100 * surface.uncertain_pixels / surface.rendered_pixels) : 0;
-    status.textContent = `Display surface · continuous AOI colour map · ${surface.min.toFixed(1)}–${surface.max.toFixed(1)} m · ${uncertainty}% interpolated/coastal pixels · DATA grid unchanged`;
-    status.className = 'status good';
+    status.textContent = 'Vista operativa: sole isobate AOI; nessuna superficie batimetrica colorata sopra la terra.';
+    status.className = 'status';
   }
 }
 
