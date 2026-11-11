@@ -1,146 +1,53 @@
-import { automaticContextBathymetry } from './bathymetry-context.js';
+/**
+ * v0.28: AOI-derived isolines are the sole operational contour source.
+ * No WFS/WMS background contours are substituted when local data are absent:
+ * they would not be clipped to the AOI or share the chosen numeric source.
+ */
 import { state, subscribeState } from '../state.js';
 import { contourDisplayAssessment } from './contour-quality.js';
 
 function waitForApp() {
   return new Promise(resolve => {
-    const tick = () => {
-      if (window.__MSO__?.contours && window.__MSO__?.map) resolve(window.__MSO__);
-      else requestAnimationFrame(tick);
-    };
+    const tick = () => window.__MSO__?.contours ? resolve(window.__MSO__) : requestAnimationFrame(tick);
     tick();
   });
 }
 
-function statusElement() {
-  return document.querySelector('#contourStatus');
-}
-
-function localSummaryText(summary) {
-  if (!summary?.feature_count) return null;
-  const quality = contourDisplayAssessment(summary);
-  const source = state.bathymetryGridSource === 'EMODNET_WCS' ? 'WCS numeric grid' : 'REST numeric grid';
-  return `Adaptive isobaths · ${source} · ${summary.interval_m} m interval · ${summary.levels_m.length} levels · confidence ${summary.confidence} · coverage ${(summary.coverage_ratio * 100).toFixed(0)}% · ${quality.ready ? 'LOCAL ACCEPTED' : 'LOCAL INSUFFICIENT'}`;
-}
-
 const app = await waitForApp();
-const contourEngine = app.contours;
-const map = app.map;
-const originalStatus = contourEngine.onStatus;
-let contextFallback = false;
-let ensureTimer = null;
-
-function contextLayerMounted() {
-  return Boolean(map.getLayer('adaptive-contours-line') || map.getLayer('contours-fallback-layer'));
-}
-
-function scheduleContextEnsure(attempt = 0) {
-  clearTimeout(ensureTimer);
-  if (!contextFallback || attempt > 8) return;
-  ensureTimer = setTimeout(() => {
-    if (!contextFallback) return;
-    if (contextLayerMounted()) return;
-    if (contourEngine.bathymetryMode !== 'emodnet-rainbow') contourEngine.setBathymetryMode('emodnet-rainbow');
-    contourEngine.setVisible(true);
-    contourEngine.refresh();
-    scheduleContextEnsure(attempt + 1);
-  }, 80 + attempt * 90);
-}
-
-contourEngine.onStatus = message => {
-  if (!contextFallback) {
-    originalStatus(message);
-    return;
-  }
-  const phase = state.aoi
-    ? 'local derived contour unavailable or below quality gate'
-    : 'waiting for local AOI bathymetry';
-  originalStatus(`CONTEXT ONLY · ${phase} · ${message}`);
-  scheduleContextEnsure();
+const engine = app.contours;
+const setStatus = (message, good = false) => {
+  const status = document.querySelector('#contourStatus');
+  if (!status) return;
+  status.textContent = message;
+  status.className = good ? 'status good' : 'status warn';
 };
 
-function applyContourSourcePolicy() {
-  if (state.bathyMode !== 'aoi-adaptive') {
-    contextFallback = false;
-    clearTimeout(ensureTimer);
+function ensureOperationalContoursOnly() {
+  if (engine.visible) engine.setVisible(false);
+  if (!state.contours || state.bathyMode === 'none') {
+    setStatus('Isobate AOI disattivate');
     return;
   }
-
-  if (!state.contours) {
-    contextFallback = false;
-    clearTimeout(ensureTimer);
-    if (contourEngine.visible) contourEngine.setVisible(false);
-    const status = statusElement();
-    if (status) status.textContent = 'Adaptive isobaths off';
+  if (!state.aoi) {
+    setStatus('Definire AOI: isobate solo da griglia batimetrica numerica, nessuna curva di contesto');
     return;
   }
-
   const summary = state.adaptiveContours;
-  const assessment = contourDisplayAssessment(summary);
-  const localReady = Boolean(summary?.feature_count > 0 && assessment.ready);
-
-  if (localReady) {
-    contextFallback = false;
-    clearTimeout(ensureTimer);
-    if (contourEngine.visible) contourEngine.setVisible(false);
-    const status = statusElement();
-    if (status) {
-      status.textContent = localSummaryText(summary);
-      status.className = summary.confidence === 'HIGH' || summary.confidence === 'MEDIUM' ? 'status good' : 'status warn';
-    }
+  const quality = contourDisplayAssessment(summary);
+  if (!quality.ready) {
+    setStatus('Isobate AOI non disponibili: ' +
+      (summary ? quality.reason : 'acquisizione dati numerici in corso o non riuscita') +
+      ' · non vengono interpolate curve WMS esterne.');
     return;
   }
-
-  // EMODnet WMS/WFS contours have no regional coverage in most of the
-  // world. Never present them as actual isolines in a GEBCO-global view.
-  if (automaticContextBathymetry(map.getCenter()) === 'gebco-global') {
-    contextFallback = false;
-    clearTimeout(ensureTimer);
-    if (contourEngine.visible) contourEngine.setVisible(false);
-    const status = statusElement();
-    if (status) {
-      status.textContent = 'GEBCO contesto globale · isobate locali non disponibili: occorre griglia numerica e derivazione delle curve.';
-      status.className = 'status warn';
-    }
-    return;
-  }
-
-  contextFallback = true;
-  if (contourEngine.bathymetryMode !== 'emodnet-rainbow') contourEngine.setBathymetryMode('emodnet-rainbow');
-  contourEngine.setDensity(state.contourDensity);
-  contourEngine.setVisible(true);
-  scheduleContextEnsure();
-
-  const status = statusElement();
-  if (status) {
-    const reason = state.aoi
-      ? summary?.feature_count
-        ? `local evidence insufficient · ${assessment.reason}`
-        : `local numeric grid produced no contour crossing${summary?.confidence ? ` · local confidence ${summary.confidence}` : ''}`
-      : 'waiting for local AOI bathymetry';
-    status.textContent = `CONTEXT ONLY · EMODnet isobaths · ${reason}`;
-    status.className = 'status warn';
-  }
+  setStatus(`Isobate AOI numeriche · ${summary.requested_levels ?? state.contourCount} richieste / ${summary.available_levels ?? summary.levels_m?.length ?? 0} disponibili · ${summary.feature_count} segmenti · confidenza ${summary.confidence}`,true);
 }
 
-subscribeState((next, patch) => {
-  if (
-    Object.prototype.hasOwnProperty.call(patch, 'aoi') ||
-    Object.prototype.hasOwnProperty.call(patch, 'adaptiveContours') ||
-    Object.prototype.hasOwnProperty.call(patch, 'bathymetryGridSource') ||
-    Object.prototype.hasOwnProperty.call(patch, 'bathyMode') ||
-    Object.prototype.hasOwnProperty.call(patch, 'contours') ||
-    Object.prototype.hasOwnProperty.call(patch, 'contourDensity')
-  ) {
-    setTimeout(applyContourSourcePolicy, 0);
+subscribeState((_,patch) => {
+  if (['aoi','adaptiveContours','bathymetryGridSource','bathyMode','contours','contourDensity','contourCount']
+    .some(key => Object.prototype.hasOwnProperty.call(patch,key))) {
+    queueMicrotask(ensureOperationalContoursOnly);
   }
 });
-
-map.on('style.load', () => {
-  if (contextFallback) scheduleContextEnsure();
-});
-map.on('moveend', () => {
-  if (state.bathyMode === 'aoi-adaptive') applyContourSourcePolicy();
-});
-
-applyContourSourcePolicy();
+app.map.on('style.load',ensureOperationalContoursOnly);
+ensureOperationalContoursOnly();
