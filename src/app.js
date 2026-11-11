@@ -9,6 +9,7 @@ import { LayerManager } from './map/layer-manager.js';
 import { AoiController } from './map/aoi-controller.js';
 import { AdaptiveContours } from './map/adaptive-contours.js';
 import { renderDepthLegend } from './map/depth-legend.js';
+import { stitchContourSegments, contourDisplayAssessment } from './map/contour-quality.js';
 import { aoiDimensionsMeters, formatMeters, recommendedZoomForAoi, resolutionAssessment } from './map/spatial-scale.js';
 import { sampleAoiBathymetry } from './data/emodnet.js';
 import { buildBellhop3dEnvironmentInventory } from './data/bellhop3d-environment.js';
@@ -75,6 +76,9 @@ root.innerHTML = `
           <option value="major">Solo livelli principali</option>
         </select></div>
         <div id="contourStatus" class="status">Waiting for map…</div>
+        <div class="request-actions">
+          <button id="downloadAoiContours" class="btn" disabled>Esporta isobate AOI (GeoJSON)</button>
+        </div>
         <div class="data-note">Vista operativa: linee di profondità, non raster colorato. Griglia e qualità rimangono associate alla sorgente numerica. La griglia può essere mostrata per debug.</div>
       </div>
 
@@ -250,6 +254,37 @@ const legendEl = document.querySelector('#depthLegend');
 let currentEnvRequest = null;
 let currentAcousticInventory = null;
 let svpCandidates = [];
+
+function getAoiIsobaths() {
+  const summary = state.adaptiveContours;
+  if (!state.aoi || !summary || !contourDisplayAssessment(summary).ready) return null;
+  const recovery = summary.derivation === 'BOUNDED_DENSER_NUMERIC_RECOVERY';
+  const raw = recovery ? window.__MSO__?.getRecoveryLocalContours?.()
+    : state.bathymetryGridSource === 'EMODNET_WCS'
+      ? window.__MSO__?.getWcsLocalContours?.()
+      : window.__MSO__?.getLocalContours?.();
+  if (!raw?.features?.length) return null;
+  const stitched = stitchContourSegments(raw);
+  if (!stitched.features.length) return null;
+  return {
+    ...stitched,
+    metadata: {
+      role: 'DERIVED_FROM_NUMERIC_AOI',
+      aoi: { ...state.aoi },
+      requested_levels: summary.requested_levels ?? state.contourCount,
+      available_levels: summary.levels_m,
+      source: summary.source ?? state.bathymetryGridSource ?? 'EMODNET_REST',
+      confidence: summary.confidence,
+      coverage_ratio: summary.coverage_ratio,
+      numerical_grid_still_required_for_predictors: true,
+      note: 'Contours are derived/visual geometry; not a substitute for the source depth grid.'
+    }
+  };
+}
+function refreshContourExport() {
+  const button = document.querySelector('#downloadAoiContours');
+  if (button) button.disabled = !getAoiIsobaths();
+}
 
 function updateLegend() {
   renderDepthLegend(legendEl, state.bathyMode, state.bathymetry);
@@ -489,6 +524,11 @@ document.querySelector('#contourCount').addEventListener('change', event => {
   }
   patchState({ contourCount: requested });
 });
+document.querySelector('#downloadAoiContours').addEventListener('click', () => {
+  const exported = getAoiIsobaths();
+  if (!exported) return;
+  downloadJson('isobaths-aoi.geojson',exported);
+});
 
 document.querySelector('#mission').addEventListener('change', event => patchState({ mission: event.target.value }));
 
@@ -703,6 +743,10 @@ setRequestButtons(false);
 renderSpatialAdequacy();
 renderBathymetryBroker();
 subscribeState((next, patch) => {
+  if (['aoi','adaptiveContours','bathymetryGridSource','contourCount'].some(key =>
+      Object.prototype.hasOwnProperty.call(patch,key))) {
+    setTimeout(refreshContourExport,90);
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'bathymetrySource') && next.aoi) renderBathymetryBroker();
   if (['aoi', 'bathymetrySource', 'bathymetryDiscoveryPlan'].some(key => Object.prototype.hasOwnProperty.call(patch, key))) invalidateAcousticInventory();
   if (Object.prototype.hasOwnProperty.call(patch, 'bathyMode')) queueMicrotask(updateMarineContextStatus);
@@ -719,6 +763,7 @@ const experimentWorkspace = attachExperimentWorkspace({
     contours: state.contours,
     contour_density: state.contourDensity,
     contour_count: state.contourCount,
+    isobaths_geojson: getAoiIsobaths() ?? null,
     bathymetry_opacity: Number(document.querySelector('#depthOpacity').value),
     max_operating_depth_m: Number(document.querySelector('#maxDepth').value),
     selected_assets: [...state.assets],
