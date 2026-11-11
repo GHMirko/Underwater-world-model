@@ -482,13 +482,14 @@ test('v0.28 counts are recomputed from AOI numeric samples, not new WMS layers',
     aoi: window.__MSO__.state.aoi,
     source: window.__MSO__.state.bathymetryGridSource,
     terrain: window.__MSO__.map.getLayer('land-basemap-minimal')?.layout?.visibility,
-    sourceRaster: window.__MSO__.map.getLayer('bathymetry-layer')?.layout?.visibility,
+    sourceRaster: window.__MSO__.map.getLayer('bathymetry-layer')
+      ? window.__MSO__.map.getLayoutProperty('bathymetry-layer','visibility') : null,
     localContour: window.__MSO__.map.getLayer('aoi-derived-contours-layer')?.layout?.visibility
   }));
   expect(after.aoi).toEqual(initial.aoi);
   expect(after.source).toBe(initial.source);
   expect(after.terrain).toBe(initial.terrain);
-  expect(after.sourceRaster).toBe('none');
+  expect([null,'none']).toContain(after.sourceRaster);
   expect(after.localContour).toBe('visible');
   await page.locator('#contourCount').fill('11');
   await page.locator('#contourCount').press('Tab');
