@@ -74,9 +74,10 @@ test('shallow WCS grid can derive local contours below the official 50 m contour
   assert.ok(contours.features.every(feature => feature.properties.depth_m < 50));
 });
 
-test('wide shallow AOI retains 2 m and 5 m priority contours even with 10 m main spacing', () => {
-  const scheme = chooseContourScheme(0.2, 52.8);
-  assert.equal(scheme.interval_m, 10);
-  assert.ok(scheme.levels.some(level => level.depth_m === 2 && level.shallow_priority));
-  assert.ok(scheme.levels.some(level => level.depth_m === 5 && level.shallow_priority));
+test('wide shallow AOI respects operator-selected count rather than adding undocumented extra levels', () => {
+  const scheme = chooseContourScheme(0.2, 52.8, 8);
+  assert.equal(scheme.requested_levels, 8);
+  assert.equal(scheme.levels.length, 8);
+  assert.ok(scheme.levels.every(level => level.depth_m > 0.2 && level.depth_m < 52.8));
+  assert.ok(scheme.levels.some(level => level.shallow_priority));
 });
