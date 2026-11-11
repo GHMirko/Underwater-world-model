@@ -90,7 +90,7 @@ export function legendModel(mode, bathymetry = null) {
       colors: AOI_ADAPTIVE_COLORS,
       ticks: adaptiveTicks(range),
       quantitative: true,
-      range: `AOI colour scale: ${range.min.toFixed(1)}–${range.max.toFixed(1)} m`
+      range: `Intervallo profondità AOI: ${range.min.toFixed(1)}–${range.max.toFixed(1)} m`
     };
   }
 
