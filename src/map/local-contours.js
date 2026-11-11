@@ -217,6 +217,8 @@ export function contourSummary(featureCollection, scheme, quality) {
   return {
     feature_count: features.length,
     levels_m: levels,
+    requested_levels: scheme?.requested_levels ?? scheme?.levels?.length ?? null,
+    available_levels: levels.length,
     interval_m: scheme?.interval_m ?? null,
     major_interval_m: scheme?.major_interval_m ?? null,
     confidence: quality?.confidence ?? 'UNKNOWN',
