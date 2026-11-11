@@ -15,6 +15,7 @@ let activeAbort = null;
 let gridGeojson = { type: 'FeatureCollection', features: [] };
 let wcsContours = { type: 'FeatureCollection', features: [] };
 let lastGrid = null;
+let lastNumericGrid = null;
 let markers = [];
 
 function waitForApp() {
@@ -46,7 +47,7 @@ function currentOpacity() {
 }
 
 function numericGridVisible() {
-  return state.bathyMode === 'aoi-adaptive' && Boolean(lastGrid) && Boolean(state.debugBathymetryGrid);
+  return state.bathyMode !== 'none' && Boolean(lastGrid) && Boolean(state.debugBathymetryGrid);
 }
 
 function adaptiveExpression(range) {
@@ -163,7 +164,7 @@ function featureMidpoint(feature) {
 
 function renderContourLabels(map) {
   clearMarkers();
-  if (!state.contours || state.bathyMode !== 'aoi-adaptive' || state.bathymetryGridSource !== 'EMODNET_WCS') return;
+  if (!state.contours || state.bathyMode === 'none' || state.bathymetryGridSource !== 'EMODNET_WCS') return;
   const summary = state.adaptiveContours;
   if (!contourDisplayAssessment(summary).ready) return;
   const stitched = stitchContourSegments(wcsContours);
@@ -192,7 +193,7 @@ function renderContourLabels(map) {
 
 function renderLegend() {
   const element = document.querySelector('#depthLegend');
-  if (!element || state.bathyMode !== 'aoi-adaptive' || !lastGrid) return;
+  if (!element || state.bathyMode === 'none' || !lastGrid) return;
   renderDepthLegend(element, 'aoi-adaptive', lastGrid);
 }
 
@@ -201,6 +202,7 @@ function clear(map) {
   activeAbort?.abort();
   activeAbort = null;
   lastGrid = null;
+  lastNumericGrid = null;
   gridGeojson = { type: 'FeatureCollection', features: [] };
   wcsContours = { type: 'FeatureCollection', features: [] };
   clearMarkers();
@@ -226,6 +228,43 @@ function reassertWcsState() {
     bathymetryQuality: lastGrid.quality,
     adaptiveContours: lastGrid.contour_summary
   });
+}
+
+function rebuildWcsContours(map) {
+  if (!lastNumericGrid || !lastGrid || state.bathymetryGridSource !== 'EMODNET_WCS') return;
+  const grid = lastNumericGrid, quality = lastGrid.quality;
+  const scheme = chooseContourScheme(grid.min, grid.max, state.contourCount);
+  wcsContours = buildAdaptiveContours({
+    samples: grid.samples, nx: grid.nx, ny: grid.ny, scheme,
+    metadata: {
+      source: 'EModnet Bathymetry WCS / standard DTM GeoTIFF',
+      native_resolution_m: EMODNET_STANDARD_RESOLUTION_M,
+      confidence: quality.confidence,
+      confidence_score: quality.confidence_score,
+      coverage_ratio: quality.coverage_ratio,
+      estimated_horizontal_uncertainty_m: quality.estimated_horizontal_uncertainty_m,
+      fitness_for_use: quality.fitness_for_use,
+      coastal_mask: grid.water_mask_applied ? grid.water_mask_source : null
+    }
+  });
+  const summary = contourSummary(wcsContours, scheme, quality);
+  summary.derivation = 'EMODNET_WCS_NUMERIC_GRID';
+  summary.source = 'EMODNET_WCS';
+  summary.grid = `${grid.nx}x${grid.ny}`;
+  summary.valid_cells = grid.valid_cells;
+  summary.total_cells = grid.total_cells;
+  summary.water_mask_applied = Boolean(grid.water_mask_applied);
+  summary.coastal_cells = grid.coastal_cells ?? 0;
+  summary.masked_land_cells = grid.masked_land_cells ?? 0;
+  lastGrid.contour_summary = summary;
+  patchState({ adaptiveContours: summary });
+  renderContourLabels(map);
+  const status = statusElement();
+  if (status) {
+    const accepted = contourDisplayAssessment(summary);
+    status.textContent = `Isobate AOI da WCS · ${scheme.requested_levels} richieste / ${summary.levels_m.length} disponibili · ${summary.feature_count} segmenti · ${accepted.ready ? 'QUALITÀ ACCETTABILE' : 'QUALITÀ INSUFFICIENTE: ' + accepted.reason}`;
+    status.className = accepted.ready ? 'status good' : 'status warn';
+  }
 }
 
 async function load(map, aoi) {
@@ -265,7 +304,7 @@ async function load(map, aoi) {
       sourceType: 'EMODNET_STANDARD_WCS',
       derivation: 'NUMERIC_GRID'
     });
-    const scheme = chooseContourScheme(grid.min, grid.max);
+    const scheme = chooseContourScheme(grid.min, grid.max, state.contourCount);
     const rawContours = buildAdaptiveContours({
       samples: grid.samples,
       nx: grid.nx,
@@ -292,6 +331,7 @@ async function load(map, aoi) {
     summary.coastal_cells = grid.coastal_cells ?? 0;
     summary.masked_land_cells = grid.masked_land_cells ?? 0;
 
+    lastNumericGrid = grid;
     wcsContours = rawContours;
     lastGrid = {
       min: grid.min,
@@ -323,7 +363,7 @@ async function load(map, aoi) {
     const assessment = contourDisplayAssessment(summary);
     if (status) {
       const shallow = scheme.levels.filter(level => level.shallow_priority).map(level => `${level.depth_m}m`).join('/');
-      status.textContent = `AOI REAL WCS · ${grid.nx}×${grid.ny} · ${grid.valid_cells}/${grid.total_cells} wet-depth cells · ${grid.min.toFixed(1)}–${grid.max.toFixed(1)} m · ${scheme.interval_m} m contours${shallow ? ` + shallow ${shallow}` : ''} · ${maskNote} · ${assessment.ready ? 'LOCAL ACCEPTED' : `LOCAL INSUFFICIENT: ${assessment.reason}`}`;
+      status.textContent = `AOI REAL WCS · ${grid.nx}×${grid.ny} · ${grid.valid_cells}/${grid.total_cells} wet-depth cells · ${grid.min.toFixed(1)}–${grid.max.toFixed(1)} m ·  ${scheme.requested_levels} richieste / ${summary.levels_m.length} disponibili · passo ${scheme.interval_m} m${shallow ? ` + shallow ${shallow}` : ''} · ${maskNote} · ${assessment.ready ? 'LOCAL ACCEPTED' : `LOCAL INSUFFICIENT: ${assessment.reason}`}`;
       status.className = assessment.ready ? 'status good' : 'status warn';
     }
   } catch (error) {
@@ -358,6 +398,7 @@ subscribeState((next, patch) => {
     renderContourLabels(map);
   }
   if (Object.prototype.hasOwnProperty.call(patch, 'contours')) renderContourLabels(map);
+  if (Object.prototype.hasOwnProperty.call(patch, 'contourCount')) rebuildWcsContours(map);
   if (
     lastGrid &&
     Object.prototype.hasOwnProperty.call(patch, 'adaptiveContours') &&

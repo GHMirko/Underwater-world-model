@@ -86,11 +86,11 @@ export function legendModel(mode, bathymetry = null) {
     if (!range) return null;
     return {
       title: 'AOI REAL bathymetry',
-      subtitle: `EMODnet numeric samples · adaptive colour scale · native source ~115 m`,
+      subtitle: `Isobate da dati numerici AOI · nessun raster batimetrico sulla terra`,
       colors: AOI_ADAPTIVE_COLORS,
       ticks: adaptiveTicks(range),
       quantitative: true,
-      range: `AOI colour scale: ${range.min.toFixed(1)}–${range.max.toFixed(1)} m`
+      range: `Intervallo profondità AOI: ${range.min.toFixed(1)}–${range.max.toFixed(1)} m`
     };
   }
 
@@ -104,7 +104,7 @@ export function legendModel(mode, bathymetry = null) {
 }
 
 export function renderDepthLegend(element, mode, bathymetry = null) {
-  const model = legendModel(mode, bathymetry);
+  const model = legendModel(mode === 'none' ? 'none' : 'aoi-adaptive', bathymetry);
   if (!model) {
     element.hidden = true;
     element.innerHTML = '';

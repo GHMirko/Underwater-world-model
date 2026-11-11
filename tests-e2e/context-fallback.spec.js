@@ -29,26 +29,27 @@ async function drawAoi(page) {
   await expect(page.locator('#aoiStatus')).not.toContainText('No AOI selected');
 }
 
-test('AOI adaptive mode keeps EMODnet context isobaths before AOI and when local crossing is unavailable', async ({ page }) => {
-  await expect(page.locator('.header .badge').first()).toContainText('v0.27');
+test('v0.28 does not manufacture AOI isobaths or overlay context when depths are constant', async ({ page }) => {
+  await expect(page.locator('.header .badge').first()).toContainText('v0.28');
   await expect(page.locator('#bathyMode')).toHaveValue('aoi-adaptive');
   await expect(page.locator('#contours')).toBeChecked();
-  await expect(page.locator('#contourStatus')).toContainText('CONTEXT ONLY');
+  await expect(page.locator('#contourCount')).toHaveValue('8');
+  await expect(page.locator('#contourStatus')).toContainText('Definire AOI');
 
   await drawAoi(page);
   await expect(page.locator('#aoiDepthGridStatus')).toContainText('AOI REAL bathymetry');
-  await page.waitForTimeout(1800);
+  await page.waitForTimeout(1500);
 
-  // Local numeric field exists, but a constant field has no contour crossing.
   const summary = await page.evaluate(() => window.__MSO__.state.adaptiveContours);
   expect(summary == null || summary.feature_count === 0).toBe(true);
-
-  // Best-available-information policy keeps context contours on rather than
-  // leaving the operator with a blank isobath layer.
-  await expect(page.locator('#contourStatus')).toContainText('CONTEXT ONLY');
-  const contextLayerPresent = await page.evaluate(() => Boolean(
-    window.__MSO__.map.getLayer('adaptive-contours-line') ||
-    window.__MSO__.map.getLayer('contours-fallback-layer')
-  ));
-  expect(contextLayerPresent).toBe(true);
+  const contextLayers = await page.evaluate(() => ({
+    wfs: Boolean(window.__MSO__.map.getLayer('adaptive-contours-line')),
+    wms: Boolean(window.__MSO__.map.getLayer('contours-fallback-layer')),
+    marine: window.__MSO__.map.getLayer('bathymetry-fallback-layer')
+      ? window.__MSO__.map.getLayoutProperty('bathymetry-fallback-layer','visibility') : null
+  }));
+  expect(contextLayers.wfs).toBe(false);
+  expect(contextLayers.wms).toBe(false);
+  expect([null,'none']).toContain(contextLayers.marine);
+  await expect(page.locator('#downloadAoiContours')).toBeDisabled();
 });

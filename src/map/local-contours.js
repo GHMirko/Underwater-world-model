@@ -1,47 +1,40 @@
-const NICE_INTERVALS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500];
+// Requested contour levels are derived from the native numeric AOI
+// min/max. They never imply new spatial information or a finer DTM.
+export function normalizeContourCount(value) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 2 || number > 30)
+    throw new Error('Numero di isobate: scegliere un intero da 2 a 30');
+  return number;
+}
 
 function clamp01(value) {
   return Math.max(0, Math.min(1, value));
 }
 
 export function chooseContourScheme(minDepth, maxDepth, targetLines = 8) {
+  const requested = normalizeContourCount(targetLines);
   const min = Number(minDepth);
   const max = Number(maxDepth);
-  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
-    return { interval_m: null, major_interval_m: null, levels: [] };
-  }
-  const span = max - min;
-  const raw = span / Math.max(3, targetLines);
-  const interval = NICE_INTERVALS.find(value => value >= raw) ?? NICE_INTERVALS.at(-1);
-  const majorInterval = interval * 5;
-  const first = Math.ceil(min / interval) * interval;
-  const levels = [];
-  for (let value = first; value <= max + interval * 1e-6 && levels.length < 40; value += interval) {
-    const rounded = Number(value.toFixed(interval < 1 ? 2 : interval < 10 ? 1 : 0));
-    const majorRatio = rounded / majorInterval;
-    const major = Math.abs(majorRatio - Math.round(majorRatio)) < 1e-6;
-    levels.push({ depth_m: rounded, major, shallow_priority: false });
-  }
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min)
+    return { interval_m: null, major_interval_m: null, requested_levels: requested, levels: [] };
 
-  // Coastal/shallow-water mission planning benefits from retaining 2 m and 5 m
-  // information even when the overall AOI span would otherwise choose 10 m or
-  // coarser contours. These are display/derived levels only; they do not imply
-  // finer native bathymetric resolution.
-  if (min < 6 && max <= 80 && interval >= 5) {
-    for (const shallow of [2, 5]) {
-      if (shallow < min - 1e-9 || shallow > max + 1e-9) continue;
-      if (!levels.some(level => Math.abs(level.depth_m - shallow) < 1e-9)) {
-        levels.push({ depth_m: shallow, major: shallow === 5, shallow_priority: true });
-      } else {
-        const existing = levels.find(level => Math.abs(level.depth_m - shallow) < 1e-9);
-        existing.shallow_priority = true;
-        if (shallow === 5) existing.major = true;
-      }
-    }
-    levels.sort((a, b) => a.depth_m - b.depth_m);
-  }
-
-  return { interval_m: interval, major_interval_m: majorInterval, levels };
+  // Sample evenly across observed range, avoiding extreme end-points.
+  // Use full floating-point depth to retain distinct levels in shallow AOIs.
+  const interval = (max - min) / (requested + 1);
+  const levels = Array.from({ length: requested }, (_, index) => {
+    const depth = Number((min + interval * (index + 1)).toPrecision(12));
+    return {
+      depth_m: depth,
+      major: index % 5 === 0 || index === requested - 1,
+      shallow_priority: depth <= 5
+    };
+  });
+  return {
+    interval_m: Number(interval.toPrecision(8)),
+    major_interval_m: Number((interval * 5).toPrecision(8)),
+    requested_levels: requested,
+    levels
+  };
 }
 
 export function assessBathymetryConfidence({
@@ -224,6 +217,8 @@ export function contourSummary(featureCollection, scheme, quality) {
   return {
     feature_count: features.length,
     levels_m: levels,
+    requested_levels: scheme?.requested_levels ?? scheme?.levels?.length ?? null,
+    available_levels: levels.length,
     interval_m: scheme?.interval_m ?? null,
     major_interval_m: scheme?.major_interval_m ?? null,
     confidence: quality?.confidence ?? 'UNKNOWN',

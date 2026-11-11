@@ -130,3 +130,9 @@
 #activeExperimentDirty{color:#f0d293}
 .operator-status-item:first-child{min-width:185px}
 @media(max-width:700px){#activeExperimentName{max-width:125px}.place-search>label[for=placeQuery]{font-size:12px}}
+
+/* v0.28: operational bathymetry is numeric AOI-derived isolines, never coloured raster. */
+.operator-workspace .depth-legend-bar,.operator-workspace .depth-legend-ticks{display:none}
+#seaMapPanel #contourCount{width:100%;font-size:15px;min-height:40px;font-weight:700}
+#seaMapPanel #contourStatus{line-height:1.6}
+#seaMapPanel .source-candidate{font-size:12px}

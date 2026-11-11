@@ -12,6 +12,7 @@ const MAX_AXIS_SAMPLES = 12;
 const MAX_TOTAL_SAMPLES = MAX_AXIS_SAMPLES * MAX_AXIS_SAMPLES;
 let generation = 0;
 let recoveryKey = null;
+let lastRecoveryData = null;
 let recoveryGeojson = { type: 'FeatureCollection', features: [] };
 let markers = [];
 
@@ -84,7 +85,7 @@ function clearMarkers() {
 }
 
 function recoveryReady() {
-  return state.bathyMode === 'aoi-adaptive'
+  return state.bathyMode !== 'none'
     && state.contours
     && state.adaptiveContours?.derivation === 'BOUNDED_DENSER_NUMERIC_RECOVERY'
     && contourDisplayAssessment(state.adaptiveContours).ready;
@@ -145,6 +146,7 @@ function render(map) {
 function clear(map) {
   generation += 1;
   recoveryKey = null;
+  lastRecoveryData = null;
   recoveryGeojson = { type: 'FeatureCollection', features: [] };
   clearMarkers();
   if (map.getSource(SOURCE_ID)) map.getSource(SOURCE_ID).setData(recoveryGeojson);
@@ -178,7 +180,8 @@ async function recover(map, aoi) {
   const depths = valid.map(sample => sample.depth);
   const min = Math.min(...depths);
   const max = Math.max(...depths);
-  const scheme = chooseContourScheme(min, max);
+  lastRecoveryData = { samples, nx, ny, min, max, quality: null, validCount: valid.length, totalCount: points.length };
+  const scheme = chooseContourScheme(min, max, state.contourCount);
   const quality = assessBathymetryConfidence({
     aoiWidthM: dimensions.width,
     aoiHeightM: dimensions.height,
@@ -189,6 +192,7 @@ async function recover(map, aoi) {
     derivation: 'NUMERIC_GRID'
   });
 
+  lastRecoveryData.quality = quality;
   const rawContours = buildAdaptiveContours({
     samples,
     nx,
@@ -234,21 +238,56 @@ async function recover(map, aoi) {
 
   render(map);
   if (status) {
-    status.textContent = `Adaptive isobaths RECOVERED · stitched · ${scheme.interval_m} m interval · ${summary.levels_m.length} levels · ${valid.length}/${points.length} samples · confidence ${quality.confidence}`;
+    status.textContent = `Adaptive isobaths RECOVERED · stitched · ${scheme.interval_m} m interval ·  ${summary.requested_levels} richieste / ${summary.levels_m.length} disponibili · ${valid.length}/${points.length} samples · confidence ${quality.confidence}`;
     status.className = quality.confidence === 'HIGH' || quality.confidence === 'MEDIUM' ? 'status good' : 'status warn';
   }
 }
 
+function rebuildRecoveryContours(map) {
+  if (!lastRecoveryData || state.bathymetryGridSource === 'EMODNET_WCS') return;
+  const { samples, nx, ny, min, max, quality, validCount, totalCount } = lastRecoveryData;
+  if (!quality) return;
+  const scheme = chooseContourScheme(min, max, state.contourCount);
+  const raw = buildAdaptiveContours({
+    samples, nx, ny, scheme, metadata: {
+      source: 'EModnet Bathymetry REST / bounded recovery grid',
+      native_resolution_m: NATIVE_GRID_M, confidence: quality.confidence,
+      confidence_score: quality.confidence_score,
+      coverage_ratio: quality.coverage_ratio,
+      estimated_horizontal_uncertainty_m: quality.estimated_horizontal_uncertainty_m,
+      fitness_for_use: quality.fitness_for_use
+    }
+  });
+  recoveryGeojson = stitchContourSegments(raw);
+  for (const feature of recoveryGeojson.features) {
+    feature.properties.derivation = `RECOVERY_${feature.properties.derivation}`;
+    feature.properties.recovery_grid = `${nx}x${ny}`;
+  }
+  const summary = contourSummary(recoveryGeojson, scheme, quality);
+  summary.derivation = recoveryGeojson.features.length ? 'BOUNDED_DENSER_NUMERIC_RECOVERY' : 'NO_LOCAL_CONTOURS';
+  summary.recovery_grid = `${nx}x${ny}`;
+  summary.recovery_samples = validCount;
+  summary.recovery_total = totalCount;
+  const assessment = contourDisplayAssessment(summary);
+  summary.display_ready = assessment.ready;
+  summary.display_reason = assessment.reason;
+  patchState({ adaptiveContours: summary, bathymetryQuality: quality });
+  if (!assessment.ready) recoveryGeojson = { type: 'FeatureCollection', features: [] };
+  render(map);
+}
+
 const app = await waitForApp();
 const map = app.map;
+window.__MSO__.getRecoveryLocalContours = () => recoveryGeojson;
 map.on('style.load', () => setTimeout(() => render(map), 0));
 
 subscribeState((next, patch) => {
   if (Object.prototype.hasOwnProperty.call(patch, 'aoi') && !next.aoi) clear(map);
+  if (Object.prototype.hasOwnProperty.call(patch, 'contourCount')) rebuildRecoveryContours(map);
 
   if (
     Object.prototype.hasOwnProperty.call(patch, 'adaptiveContours') &&
-    next.bathyMode === 'aoi-adaptive' &&
+    next.bathyMode !== 'none' &&
     next.contours &&
     next.aoi &&
     !contourDisplayAssessment(next.adaptiveContours).ready
@@ -261,7 +300,8 @@ subscribeState((next, patch) => {
     Object.prototype.hasOwnProperty.call(patch, 'contours') ||
     Object.prototype.hasOwnProperty.call(patch, 'contourDensity') ||
     Object.prototype.hasOwnProperty.call(patch, 'baseMap') ||
-    Object.prototype.hasOwnProperty.call(patch, 'adaptiveContours')
+    Object.prototype.hasOwnProperty.call(patch, 'adaptiveContours') ||
+    Object.prototype.hasOwnProperty.call(patch, 'contourCount')
   ) {
     setTimeout(() => render(map), 0);
   }

@@ -9,6 +9,7 @@ import { LayerManager } from './map/layer-manager.js';
 import { AoiController } from './map/aoi-controller.js';
 import { AdaptiveContours } from './map/adaptive-contours.js';
 import { renderDepthLegend } from './map/depth-legend.js';
+import { stitchContourSegments, contourDisplayAssessment } from './map/contour-quality.js';
 import { aoiDimensionsMeters, formatMeters, recommendedZoomForAoi, resolutionAssessment } from './map/spatial-scale.js';
 import { sampleAoiBathymetry } from './data/emodnet.js';
 import { buildBellhop3dEnvironmentInventory } from './data/bellhop3d-environment.js';
@@ -25,7 +26,7 @@ root.innerHTML = `
 <div class="app">
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
-    <span class="badge">GitHub v0.27 Experiments / Search</span>
+    <span class="badge">GitHub v0.28 AOI Isobaths</span>
 
   </header>
   <div class="workspace">
@@ -54,8 +55,8 @@ root.innerHTML = `
         <h2>Sea / Bathymetry</h2>
         <div id="seaMaskStatus" class="status">Coastline display mask: not initialized.</div>
         <div id="marineContextStatus" class="status">Rilevamento copertura GEBCO / EMODnet…</div>
-        <div class="data-note" id="seaContextNote">Contesto batimetrico automatico: GEBCO 2026 globale; EMODnet nelle regioni coperte. La carta di profondità è indicativa e distinta dai dati numerici per i predittori. Se il WMS fallisce, lo sfondo marino resta azzurro.</div>
-        <div class="field"><label>Bathymetry layer (independent of land)</label><select id="bathyMode">
+        <div class="data-note" id="seaContextNote">Vista operativa: solo isobate ricavate dalla batimetria numerica dell'AOI. Le sorgenti restano selezionabili, ma i raster WMS non vengono disegnati sulla carta terrestre. Senza griglia numerica adeguata non vengono create curve.</div>
+        <div class="field"><label>Sorgente batimetrica / riferimento (terra invariata)</label><select id="bathyMode">
           <option value="aoi-adaptive">AOI REAL · contesto automatico</option>
           <option value="chart-relief">Chart Relief · sea-only</option>
           <option value="emodnet-rainbow">EMODnet Rainbow · sea-only</option>
@@ -63,15 +64,22 @@ root.innerHTML = `
           <option value="gebco-global">GEBCO 2026 · global context</option>
           <option value="none">None</option>
         </select></div>
-        <div class="field"><label>Bathymetry opacity</label><input id="depthOpacity" type="range" min="0" max="100" value="72"></div>
+        <div class="field"><label>Opacità griglia numerica (solo debug)</label><input id="depthOpacity" type="range" min="0" max="100" value="72"></div>
         <label class="debug-control"><input id="debugBathymetryGrid" type="checkbox"> Debug numeric grid · engineering only</label>
-        <label><input id="contours" type="checkbox" checked> Isobaths · source identified</label>
-        <div class="field"><label>Isobath detail</label><select id="contourDensity">
-          <option value="dense">Detailed where source supports it</option>
-          <option value="major">Major only where source supports it</option>
+        <label><input id="contours" type="checkbox" checked> Visualizza isobate derivate dall'AOI</label>
+        <div class="field"><label for="contourCount">Numero di isobate richieste (2–30)</label>
+          <input id="contourCount" type="number" min="2" max="30" step="1" value="8">
+          <small class="field-note">Profondità tra minimo e massimo realmente campionati. Le curve visibili dipendono da risoluzione, attraversamenti e qualità: il numero effettivo può essere inferiore.</small>
+        </div>
+        <div class="field"><label>Visualizzazione livelli</label><select id="contourDensity">
+          <option value="dense">Tutte le isobate disponibili</option>
+          <option value="major">Solo livelli principali</option>
         </select></div>
         <div id="contourStatus" class="status">Waiting for map…</div>
-        <div class="data-note">Normal view uses a continuous display surface plus derived isobaths. The native numeric grid is hidden unless Debug is enabled; analytical consumers always use the numeric data layer, never the display texture.</div>
+        <div class="request-actions">
+          <button id="downloadAoiContours" class="btn" disabled>Esporta isobate AOI (GeoJSON)</button>
+        </div>
+        <div class="data-note">Vista operativa: linee di profondità, non raster colorato. Griglia e qualità rimangono associate alla sorgente numerica. La griglia può essere mostrata per debug.</div>
       </div>
 
       <div class="panel" id="experimentPanel">
@@ -212,7 +220,7 @@ function updateMarineContextStatus() {
   status.dataset.failedProvider = '';
   status.textContent = (isAutomatic ? 'AUTO · ' : '') + description.title +
     ' · WMS cartografico, non griglia numerica. ' +
-    (isAutomatic ? 'La sorgente cambia quando si naviga fuori dall’area EMODnet.' : '');
+    (isAutomatic ? 'Il riferimento cambia con la posizione; nessun raster colorato viene disegnato.' : 'I raster colorati non sono disegnati nella vista operativa.');
   status.className = description.status === 'OUTSIDE_REGIONAL_COVERAGE' ? 'status warn' : 'status';
 }
 
@@ -246,6 +254,37 @@ const legendEl = document.querySelector('#depthLegend');
 let currentEnvRequest = null;
 let currentAcousticInventory = null;
 let svpCandidates = [];
+
+function getAoiIsobaths() {
+  const summary = state.adaptiveContours;
+  if (!state.aoi || !summary || !contourDisplayAssessment(summary).ready) return null;
+  const recovery = summary.derivation === 'BOUNDED_DENSER_NUMERIC_RECOVERY';
+  const raw = recovery ? window.__MSO__?.getRecoveryLocalContours?.()
+    : state.bathymetryGridSource === 'EMODNET_WCS'
+      ? window.__MSO__?.getWcsLocalContours?.()
+      : window.__MSO__?.getLocalContours?.();
+  if (!raw?.features?.length) return null;
+  const stitched = stitchContourSegments(raw);
+  if (!stitched.features.length) return null;
+  return {
+    ...stitched,
+    metadata: {
+      role: 'DERIVED_FROM_NUMERIC_AOI',
+      aoi: { ...state.aoi },
+      requested_levels: summary.requested_levels ?? state.contourCount,
+      available_levels: summary.levels_m,
+      source: summary.source ?? state.bathymetryGridSource ?? 'EMODNET_REST',
+      confidence: summary.confidence,
+      coverage_ratio: summary.coverage_ratio,
+      numerical_grid_still_required_for_predictors: true,
+      note: 'Contours are derived/visual geometry; not a substitute for the source depth grid.'
+    }
+  };
+}
+function refreshContourExport() {
+  const button = document.querySelector('#downloadAoiContours');
+  if (button) button.disabled = !getAoiIsobaths();
+}
 
 function updateLegend() {
   renderDepthLegend(legendEl, state.bathyMode, state.bathymetry);
@@ -476,6 +515,20 @@ document.querySelector('#contourDensity').addEventListener('change', event => {
   patchState({ contourDensity: event.target.value });
   contours.setDensity(event.target.value);
 });
+document.querySelector('#contourCount').addEventListener('change', event => {
+  const requested = Number(event.target.value);
+  if (!Number.isInteger(requested) || requested < 2 || requested > 30) {
+    event.target.value = state.contourCount;
+    document.querySelector('#contourStatus').textContent = 'Numero isobate non valido: scegliere da 2 a 30.';
+    return;
+  }
+  patchState({ contourCount: requested });
+});
+document.querySelector('#downloadAoiContours').addEventListener('click', () => {
+  const exported = getAoiIsobaths();
+  if (!exported) return;
+  downloadJson('isobaths-aoi.geojson',exported);
+});
 
 document.querySelector('#mission').addEventListener('change', event => patchState({ mission: event.target.value }));
 
@@ -690,6 +743,10 @@ setRequestButtons(false);
 renderSpatialAdequacy();
 renderBathymetryBroker();
 subscribeState((next, patch) => {
+  if (['aoi','adaptiveContours','bathymetryGridSource','contourCount'].some(key =>
+      Object.prototype.hasOwnProperty.call(patch,key))) {
+    setTimeout(refreshContourExport,90);
+  }
   if (Object.prototype.hasOwnProperty.call(patch, 'bathymetrySource') && next.aoi) renderBathymetryBroker();
   if (['aoi', 'bathymetrySource', 'bathymetryDiscoveryPlan'].some(key => Object.prototype.hasOwnProperty.call(patch, key))) invalidateAcousticInventory();
   if (Object.prototype.hasOwnProperty.call(patch, 'bathyMode')) queueMicrotask(updateMarineContextStatus);
@@ -705,6 +762,8 @@ const experimentWorkspace = attachExperimentWorkspace({
     bathymetry_mode: state.bathyMode,
     contours: state.contours,
     contour_density: state.contourDensity,
+    contour_count: state.contourCount,
+    isobaths_geojson: getAoiIsobaths() ?? null,
     bathymetry_opacity: Number(document.querySelector('#depthOpacity').value),
     max_operating_depth_m: Number(document.querySelector('#maxDepth').value),
     selected_assets: [...state.assets],
@@ -752,6 +811,7 @@ const experimentWorkspace = attachExperimentWorkspace({
       bathyMode: snap.bathymetry_mode ?? 'aoi-adaptive',
       contours: snap.contours !== false,
       contourDensity: snap.contour_density ?? 'dense',
+      contourCount: Number.isInteger(snap.contour_count) && snap.contour_count >= 2 && snap.contour_count <= 30 ? snap.contour_count : 8,
       bathymetryGridSource: null,
       bathymetryGrid: null,
       bathymetryQuality: null,
@@ -767,8 +827,9 @@ const experimentWorkspace = attachExperimentWorkspace({
     layers.setBathymetry(state.bathyMode);
     contours.setBathymetryMode(state.bathyMode);
     document.querySelector('#contours').checked = state.contours;
-    contours.setVisible(state.contours);
+    contours.setVisible(false); // no remote WFS/WMS isolines
     document.querySelector('#contourDensity').value = state.contourDensity;
+    document.querySelector('#contourCount').value = state.contourCount;
     contours.setDensity(state.contourDensity);
     document.querySelector('#depthOpacity').value = snap.bathymetry_opacity ?? 72;
     layers.setDepthOpacity(Number(document.querySelector('#depthOpacity').value)/100);
@@ -821,7 +882,7 @@ const experimentWorkspace = attachExperimentWorkspace({
   openMission: () => operatorUI.open('mission')
 });
 subscribeState((next,patch)=>{
-  if(['aoi','bathymetry','bathymetrySource','bathymetryGridSource','bathyMode','mission',
+  if(['aoi','bathymetry','bathymetrySource','bathymetryGridSource','bathyMode','mission','contourCount',
       'bathymetryDiscoveryPlan'].some(k=>Object.prototype.hasOwnProperty.call(patch,k)))
     experimentWorkspace.markDirty();
 });

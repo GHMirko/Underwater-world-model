@@ -23,7 +23,7 @@ function waitForApp() {
 }
 
 function active() {
-  return state.bathyMode === 'aoi-adaptive' &&
+  return state.bathyMode !== 'none' &&
     state.contours &&
     state.bathymetryGridSource === 'EMODNET_WCS';
 }
