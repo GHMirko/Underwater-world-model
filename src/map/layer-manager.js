@@ -66,6 +66,10 @@ export class LayerManager {
       id: layerId,
       type: 'raster',
       source: sourceId,
+      // WMS images include unverified land/no-data pixels. Keep source
+      // selectable as metadata/context, but do not paint it on the operational
+      // basemap. Numeric AOI-derived isolines are the marine presentation.
+      layout: { visibility: 'none' },
       paint: {
         'raster-opacity': opacity,
         'raster-resampling': 'linear'
@@ -133,6 +137,7 @@ export class LayerManager {
         id: IDS.bathyLayer,
         type: 'color-relief',
         source: IDS.bathySource,
+        layout: { visibility: 'none' },
         paint: {
           'color-relief-color': chartReliefExpression(),
           'color-relief-opacity': this.depthOpacity,
