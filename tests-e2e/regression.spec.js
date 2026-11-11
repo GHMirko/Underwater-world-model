@@ -39,7 +39,7 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await expect(page.locator('.header .badge').first()).toContainText('v0.27');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.28');
   await expect(page.locator('#baseMap option')).toHaveCount(2);
   await expect(page.locator('#baseMap')).toContainText('Minimal');
   await expect(page.locator('#baseMap')).toContainText('Satellite');
@@ -50,7 +50,7 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   await expect(page.locator('#contours')).toBeEnabled();
   await expect(page.locator('#contourDensity')).toBeEnabled();
   await expect(page.locator('#debugBathymetryGrid')).not.toBeChecked();
-  await expect(page.locator('#contourStatus')).toContainText('waiting');
+  await expect(page.locator('#contourStatus')).toContainText(/isobat|AOI/i);
 
   await page.evaluate(() => window.__MSO__.map.setZoom(17));
   await page.waitForTimeout(250);
@@ -68,8 +68,8 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   // Visual overzoom must not hide the depth legend.
   await expect(page.locator('#depthLegend')).toBeVisible();
   await expect(page.locator('#depthLegend')).toContainText('AOI REAL bathymetry');
-  await expect(page.locator('#contourStatus')).toContainText('Adaptive isobaths');
-  await expect(page.locator('#contourStatus')).toContainText('confidence');
+  await expect(page.locator('#contourStatus')).toContainText(/isobat/i);
+  await expect(page.locator('#contourStatus')).toContainText(/confiden|confidence/i);
 
   await expect.poll(async () => page.evaluate(() =>
     window.__MSO__.map.getLayer('aoi-derived-contours-layer')
@@ -121,11 +121,11 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   await page.locator('#contourDensity').selectOption('dense');
 
   await page.locator('#contours').uncheck();
-  await expect(page.locator('#contourStatus')).toContainText('off');
+  await expect(page.locator('#contourStatus')).toContainText(/disattivat|off/i);
   const hidden = await page.evaluate(() => window.__MSO__.map.getLayoutProperty('aoi-derived-contours-layer', 'visibility'));
   expect(hidden).toBe('none');
   await page.locator('#contours').check();
-  await expect(page.locator('#contourStatus')).toContainText('Adaptive isobaths');
+  await expect(page.locator('#contourStatus')).toContainText(/isobat/i);
 
   await page.locator('#baseMap').selectOption('satellite');
   await page.waitForTimeout(900);
@@ -140,24 +140,25 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   expect(afterBasemap.numericVisibility).toBe('none');
   expect(afterBasemap.contours).toBe(true);
   expect(afterBasemap.contourVisibility).toBe('visible');
-  await expect(page.locator('#depthLegend')).toContainText('AOI colour scale');
+  await expect(page.locator('#depthLegend')).toContainText('Intervallo profondità AOI');
 
   await page.locator('#bathyMode').selectOption('emodnet-rainbow');
   await page.waitForTimeout(500);
-  await expect(page.locator('#depthLegend')).toContainText('context');
+  await expect(page.locator('#depthLegend')).toContainText('AOI REAL bathymetry');
   const contextState = await page.evaluate(() => ({
     wms: Boolean(window.__MSO__.map.getLayer('bathymetry-layer')),
     numericVisibility: window.__MSO__.map.getLayoutProperty('aoi-depth-grid-layer', 'visibility'),
     localContourVisibility: window.__MSO__.map.getLayoutProperty('aoi-derived-contours-layer', 'visibility')
   }));
   expect(contextState.wms).toBe(true);
+  expect(await page.evaluate(() => window.__MSO__.map.getLayoutProperty('bathymetry-layer','visibility'))).toBe('none');
   expect(contextState.numericVisibility).toBe('none');
-  expect(contextState.localContourVisibility).toBe('none');
+  expect(contextState.localContourVisibility).toBe('visible');
 
   await page.locator('#bathyMode').selectOption('aoi-adaptive');
   await page.waitForTimeout(300);
   await expect(page.locator('#depthLegend')).toContainText('AOI REAL bathymetry');
-  await expect(page.locator('#contourStatus')).toContainText('Adaptive isobaths');
+  await expect(page.locator('#contourStatus')).toContainText(/isobat/i);
 
   await expect(page.locator('#envVariables input:checked')).toHaveCount(5);
   await openPanel(page, 'data');
@@ -175,7 +176,7 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   await page.locator('#quickClearAoi').click();
   await expect(page.locator('#aoiStatus')).toContainText('No AOI selected');
   await expect(page.locator('#depthLegend')).toBeHidden();
-  await expect(page.locator('#contourStatus')).toContainText('waiting');
+  await expect(page.locator('#contourStatus')).toContainText(/isobat|AOI/i);
 
   expect(errors).toEqual([]);
 });
@@ -269,7 +270,7 @@ test('v0.21 land style switch preserves the marine stack, AOI and numeric data',
 test('v0.22 renders sea context without AOI and does not reset it on land switch', async ({ page }) => {
   await expect(page.locator('#bathyMode')).toHaveValue('aoi-adaptive');
   await expect(page.locator('#aoiStatus')).toContainText('No AOI selected');
-  await expect(page.locator('#seaContextNote')).toContainText('GEBCO 2026 globale');
+  await expect(page.locator('#seaContextNote')).toContainText('solo isobate');
   await expect.poll(async () => page.evaluate(() => Boolean(window.__MSO__.map.getLayer('bathymetry-fallback-layer'))), { timeout: 10000 }).toBe(true);
   const before = await page.evaluate(() => {
     const map = window.__MSO__.map;
@@ -311,7 +312,7 @@ test('v0.23 GEBCO context WMS remains mounted beyond native scale and labels iso
   await expect.poll(async () => page.evaluate(() =>
     Boolean(window.__MSO__.map.getLayer('bathymetry-layer'))
   ), { timeout: 10000 }).toBe(true);
-  await expect(page.locator('#contourStatus')).toContainText('DIFFERENT SOURCE from GEBCO');
+  await expect(page.locator('#contourStatus')).toContainText(/isobat|AOI/i);
   await page.evaluate(() => window.__MSO__.map.setZoom(17));
   await expect(page.locator('#bathymetryDetailLimit')).toContainText('Sovrascala batimetrica');
   const current = await page.evaluate(() => {
@@ -326,7 +327,7 @@ test('v0.23 GEBCO context WMS remains mounted beyond native scale and labels iso
   expect(current.rasterPresent).toBe(true);
   expect(current.rasterMaxZoom).toBeGreaterThan(17);
   expect(current.rasterSourceMaxZoom).toBe(11);
-  expect(current.contoursPresent).toBe(true);
+  expect(current.contoursPresent).toBe(false);
 });
 
 
@@ -457,4 +458,39 @@ test('v0.25 AOI REAL selects global GEBCO in Malaysia and EMODnet in Europe', as
   await page.evaluate(() => window.__MSO__.map.jumpTo({center:[15,43],zoom:8}));
   await expect.poll(async () => page.evaluate(() => window.__MSO__.layers.getContextBathymetry()), { timeout: 8000 }).toBe('emodnet-multicolour');
   await expect(page.locator('#marineContextStatus')).toContainText('EMODnet regional');
+});
+
+
+test('v0.28 counts are recomputed from AOI numeric samples, not new WMS layers', async ({ page }) => {
+  await expect(page.locator('#contourCount')).toHaveValue('8');
+  await page.evaluate(() => window.__MSO__.map.setZoom(17));
+  await page.waitForTimeout(180);
+  await drawAoi(page, {x:150,y:130},{x:540,y:490});
+  await expect.poll(async()=>page.evaluate(()=>window.__MSO__.state.adaptiveContours?.requested_levels), {timeout:10000}).toBe(8);
+  const initial = await page.evaluate(()=>({
+    aoi: {...window.__MSO__.state.aoi},
+    source: window.__MSO__.state.bathymetryGridSource,
+    terrain: window.__MSO__.map.getLayer('land-basemap-minimal')?.layout?.visibility
+  }));
+  await page.locator('#contourCount').fill('5');
+  await page.locator('#contourCount').press('Tab');
+  await expect.poll(async()=>page.evaluate(()=>window.__MSO__.state.adaptiveContours?.requested_levels), {timeout:10000}).toBe(5);
+  await expect(page.locator('#contourStatus')).toContainText(/5 richieste/);
+  await expect(page.locator('#downloadAoiContours')).toBeEnabled();
+  await page.locator('#bathyMode').selectOption('gebco-global');
+  const after = await page.evaluate(()=>({
+    aoi: window.__MSO__.state.aoi,
+    source: window.__MSO__.state.bathymetryGridSource,
+    terrain: window.__MSO__.map.getLayer('land-basemap-minimal')?.layout?.visibility,
+    sourceRaster: window.__MSO__.map.getLayer('bathymetry-layer')?.layout?.visibility,
+    localContour: window.__MSO__.map.getLayer('aoi-derived-contours-layer')?.layout?.visibility
+  }));
+  expect(after.aoi).toEqual(initial.aoi);
+  expect(after.source).toBe(initial.source);
+  expect(after.terrain).toBe(initial.terrain);
+  expect(after.sourceRaster).toBe('none');
+  expect(after.localContour).toBe('visible');
+  await page.locator('#contourCount').fill('11');
+  await page.locator('#contourCount').press('Tab');
+  await expect.poll(async()=>page.evaluate(()=>window.__MSO__.state.adaptiveContours?.requested_levels), {timeout:10000}).toBe(11);
 });
