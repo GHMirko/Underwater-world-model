@@ -79,5 +79,5 @@ test('wide shallow AOI respects operator-selected count rather than adding undoc
   assert.equal(scheme.requested_levels, 8);
   assert.equal(scheme.levels.length, 8);
   assert.ok(scheme.levels.every(level => level.depth_m > 0.2 && level.depth_m < 52.8));
-  assert.ok(scheme.levels.some(level => level.shallow_priority));
+  assert.ok(scheme.levels.every(level => level.depth_m !== 2 && level.depth_m !== 5), 'no additional unrequested levels are inserted');
 });
