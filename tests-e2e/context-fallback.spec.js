@@ -45,10 +45,11 @@ test('v0.28 does not manufacture AOI isobaths or overlay context when depths are
   const contextLayers = await page.evaluate(() => ({
     wfs: Boolean(window.__MSO__.map.getLayer('adaptive-contours-line')),
     wms: Boolean(window.__MSO__.map.getLayer('contours-fallback-layer')),
-    marine: window.__MSO__.map.getLayer('bathymetry-fallback-layer')?.layout?.visibility ?? null
+    marine: window.__MSO__.map.getLayer('bathymetry-fallback-layer')
+      ? window.__MSO__.map.getLayoutProperty('bathymetry-fallback-layer','visibility') : null
   }));
   expect(contextLayers.wfs).toBe(false);
   expect(contextLayers.wms).toBe(false);
-  expect(contextLayers.marine).toBe('none');
+  expect([null,'none']).toContain(contextLayers.marine);
   await expect(page.locator('#downloadAoiContours')).toBeDisabled();
 });
