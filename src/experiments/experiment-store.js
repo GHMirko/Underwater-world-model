@@ -181,6 +181,7 @@ export async function saveExperimentFolder(dir,doc){
   const snapshot=parsed.snapshot;
   if(!snapshot.aoi) await clearGeneratedFile(dir,[],'aoi.geojson');
   if(!snapshot.environment_request)await clearGeneratedFile(dir,['world-model'],'environmental-request.json');
+  if(!snapshot.isobaths_geojson)await clearGeneratedFile(dir,['world-model'],'isobaths.geojson');
   if(!snapshot.world_model_package)await clearGeneratedFile(dir,['world-model'],'world-model-package.json');
   if(!snapshot.acoustic_inventory)await clearGeneratedFile(dir,['acoustic'],'bellhop3d-environment.json');
   if(!snapshot.svp_candidates?.length)await clearGeneratedFile(dir,['inputs','raw'],'svp-observations-imported.json');
@@ -196,6 +197,10 @@ export async function saveExperimentFolder(dir,doc){
   if(snapshot.environment_request){
     const p=await ensureSubdir(dir,['world-model']);
     await writeFile(p,'environmental-request.json',JSON.stringify(snapshot.environment_request,null,2));
+  }
+  if(snapshot.isobaths_geojson){
+    const p=await ensureSubdir(dir,['world-model']);
+    await writeFile(p,'isobaths.geojson',JSON.stringify(snapshot.isobaths_geojson,null,2));
   }
   if(snapshot.world_model_package){
     const p=await ensureSubdir(dir,['world-model']);
