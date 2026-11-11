@@ -278,6 +278,7 @@ function rebuildRecoveryContours(map) {
 
 const app = await waitForApp();
 const map = app.map;
+window.__MSO__.getRecoveryLocalContours = () => recoveryGeojson;
 map.on('style.load', () => setTimeout(() => render(map), 0));
 
 subscribeState((next, patch) => {
