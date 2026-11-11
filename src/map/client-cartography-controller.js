@@ -16,6 +16,8 @@ let lastContourGeojson = { type: 'FeatureCollection', features: [] };
 let lastRange = null;
 let lastQuality = null;
 let lastContourScheme = null;
+let lastSamples = [];
+let lastShape = null;
 let requestGeneration = 0;
 const restoreTimers = new Set();
 let contourMarkers = [];
@@ -95,7 +97,7 @@ function clearContourMarkers() {
 }
 
 function localContoursVisible() {
-  return state.bathyMode === 'aoi-adaptive' && state.contours;
+  return state.bathyMode !== 'none' && state.contours;
 }
 
 function ensureLayer(map) {
@@ -188,7 +190,7 @@ function renderLegend() {
 
 function renderLocalContourStatus() {
   const status = document.querySelector('#contourStatus');
-  if (!status || state.bathyMode !== 'aoi-adaptive') return;
+  if (!status || state.bathyMode === 'none') return;
   if (!state.contours) {
     status.textContent = 'Adaptive isobaths off';
     status.className = 'status';
@@ -201,7 +203,7 @@ function renderLocalContourStatus() {
     return;
   }
   status.textContent = summary.feature_count
-    ? `Adaptive isobaths · ${summary.interval_m} m interval · ${summary.levels_m.length} levels · confidence ${summary.confidence} · coverage ${(summary.coverage_ratio * 100).toFixed(0)}%`
+    ? `Adaptive isobaths · ${summary.requested_levels ?? state.contourCount} richieste / ${summary.levels_m.length} disponibili · ${summary.interval_m} m intervallo · confidence ${summary.confidence} · coverage ${(summary.coverage_ratio * 100).toFixed(0)}%`
     : `Adaptive isobaths: no contour crossing in the valid sampled grid · confidence ${summary.confidence}`;
   status.className = summary.confidence === 'HIGH' || summary.confidence === 'MEDIUM' ? 'status good' : 'status warn';
 }
@@ -213,6 +215,8 @@ function clear(map, status) {
   lastRange = null;
   lastQuality = null;
   lastContourScheme = null;
+  lastSamples = [];
+  lastShape = null;
   patchState({ bathymetryQuality: null, adaptiveContours: null });
   scheduleRender(map);
   renderLegend();
@@ -240,6 +244,8 @@ async function loadAoiGrid(map, aoi, status) {
     lastRange = null;
     lastQuality = null;
     lastContourScheme = null;
+    lastSamples = [];
+    lastShape = null;
     lastContourGeojson = { type: 'FeatureCollection', features: [] };
     patchState({ bathymetryQuality: null, adaptiveContours: null });
     scheduleRender(map);
@@ -256,7 +262,9 @@ async function loadAoiGrid(map, aoi, status) {
   const dimensions = aoiDimensionsMeters(aoi);
   lastRange = { min, max, samples: valid.length, source: 'REAL_EMODNET_REST' };
   lastQuality = assessBathymetryConfidence({ aoiWidthM: dimensions.width, aoiHeightM: dimensions.height, nativeResolutionM: NATIVE_GRID_M, validSamples: valid.length, totalSamples: points.length, sourceType: 'EMODNET_STANDARD_REST', derivation: 'NUMERIC_GRID' });
-  lastContourScheme = chooseContourScheme(min, max);
+  lastSamples = valid;
+  lastShape = { nx, ny };
+  lastContourScheme = chooseContourScheme(min, max, state.contourCount);
   lastContourGeojson = buildAdaptiveContours({ samples, nx, ny, scheme: lastContourScheme, metadata: { source: 'EModnet Bathymetry REST / standard DTM', native_resolution_m: NATIVE_GRID_M, confidence: lastQuality.confidence, confidence_score: lastQuality.confidence_score, coverage_ratio: lastQuality.coverage_ratio, estimated_horizontal_uncertainty_m: lastQuality.estimated_horizontal_uncertainty_m, fitness_for_use: lastQuality.fitness_for_use } });
   const summary = contourSummary(lastContourGeojson, lastContourScheme, lastQuality);
   patchState({ bathymetryQuality: lastQuality, adaptiveContours: summary });
@@ -267,21 +275,39 @@ async function loadAoiGrid(map, aoi, status) {
   status.className = lastQuality.confidence === 'HIGH' || lastQuality.confidence === 'MEDIUM' ? 'status good' : 'status warn';
 }
 
+function rebuildContoursFromCachedSamples(map) {
+  if (!lastRange || !lastQuality || !lastShape || !lastSamples.length) return;
+  lastContourScheme = chooseContourScheme(lastRange.min, lastRange.max, state.contourCount);
+  lastContourGeojson = buildAdaptiveContours({
+    samples: lastSamples, nx: lastShape.nx, ny: lastShape.ny, scheme: lastContourScheme,
+    metadata: {
+      source: 'EModnet Bathymetry REST / standard DTM',
+      native_resolution_m: NATIVE_GRID_M,
+      confidence: lastQuality.confidence,
+      confidence_score: lastQuality.confidence_score,
+      coverage_ratio: lastQuality.coverage_ratio,
+      estimated_horizontal_uncertainty_m: lastQuality.estimated_horizontal_uncertainty_m,
+      fitness_for_use: lastQuality.fitness_for_use
+    }
+  });
+  if (state.bathymetryGridSource !== 'EMODNET_WCS') {
+    patchState({ bathymetryQuality: lastQuality,
+      adaptiveContours: contourSummary(lastContourGeojson, lastContourScheme, lastQuality) });
+  }
+  scheduleRender(map);
+  renderLocalContourStatus();
+}
+
 function syncContourUi(app) {
-  const adaptive = state.bathyMode === 'aoi-adaptive';
+  const adaptive = state.bathyMode !== 'none';
   const checkbox = document.querySelector('#contours');
   const density = document.querySelector('#contourDensity');
   if (checkbox) { checkbox.disabled = false; checkbox.title = adaptive ? 'Derived locally from best available numeric bathymetry; confidence is shown explicitly.' : ''; }
   if (density) density.disabled = false;
-  if (adaptive) {
-    app.contours.setVisible(false);
-    renderLocalContourStatus();
-  } else {
-    clearContourMarkers();
-    app.contours.setBathymetryMode(state.bathyMode);
-    app.contours.setDensity(state.contourDensity);
-    app.contours.setVisible(state.contours);
-  }
+  // Context WFS/WMS contours are not authoritative for the selected AOI.
+  // Keep them suppressed in every source-selection mode.
+  if (app.contours.visible) app.contours.setVisible(false);
+  renderLocalContourStatus();
 }
 
 function configureClientUi(app) {
@@ -294,7 +320,7 @@ function configureClientUi(app) {
   }
   const bathySelect = document.querySelector('#bathyMode');
   if (bathySelect) {
-    bathySelect.innerHTML = `<option value="aoi-adaptive">AOI REAL · adaptive min/max</option><option value="emodnet-multicolour">EMODnet Multicolour · Europe context WMS</option><option value="emodnet-rainbow">EMODnet Rainbow · Europe context WMS</option><option value="gebco-global">GEBCO 2026 · global context WMS</option><option value="chart-relief">Chart Relief · context only</option><option value="none">None</option>`;
+    bathySelect.innerHTML = `<option value="aoi-adaptive">AOI REAL · isobate numeriche</option><option value="emodnet-multicolour">EMODnet (sorgente, nessun raster sulla terra)</option><option value="emodnet-rainbow">EMODnet Rainbow (solo riferimento)</option><option value="gebco-global">GEBCO (solo riferimento globale)</option><option value="chart-relief">Chart Relief (solo riferimento)</option><option value="none">None</option>`;
     bathySelect.value = state.bathyMode;
   }
   layers.setBathymetry(state.bathyMode);
@@ -326,8 +352,9 @@ subscribeState((next, patch) => {
   if (Object.prototype.hasOwnProperty.call(patch, 'aoi')) { if (!next.aoi) clear(map, status); else loadAoiGrid(map, next.aoi, status); }
   if (Object.prototype.hasOwnProperty.call(patch, 'bathyMode')) { syncContourUi(app); scheduleRender(map); renderLegend(); }
   if (Object.prototype.hasOwnProperty.call(patch, 'debugBathymetryGrid')) scheduleRender(map);
+  if (Object.prototype.hasOwnProperty.call(patch, 'contourCount')) rebuildContoursFromCachedSamples(map);
   if (Object.prototype.hasOwnProperty.call(patch, 'contours') || Object.prototype.hasOwnProperty.call(patch, 'contourDensity')) {
-    if (next.bathyMode === 'aoi-adaptive') { scheduleRender(map); renderLocalContourStatus(); }
+    if (next.bathyMode !== 'none') { scheduleRender(map); renderLocalContourStatus(); }
   }
   if (Object.prototype.hasOwnProperty.call(patch, 'bathymetry') && next.bathyMode === 'aoi-adaptive') renderLegend();
 });
