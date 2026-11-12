@@ -36,3 +36,38 @@ export function filterContours(featureCollection, zoom) {
     })
   };
 }
+
+
+/**
+ * Context-only published EMODnet isolines, never an AOI numeric extraction.
+ * Preserve only levels actually returned by WFS. Unlike the old zoom cutoff,
+ * do not discard coastal 50/100 m levels just because the operator is
+ * browsing at regional zoom. N is a cap, not a request to invent new depths.
+ */
+export function selectContextContourLevels(collection, targetLevels = 8) {
+  const count = Math.max(2, Math.min(30, Number.isFinite(Number(targetLevels))
+    ? Math.round(Number(targetLevels)) : 8));
+  const valid = (collection?.features ?? []).flatMap(feature => {
+    const depth = depthFromProperties(feature.properties);
+    if (!Number.isFinite(depth) || depth <= 0) return [];
+    if (!['LineString','MultiLineString'].includes(feature?.geometry?.type)) return [];
+    return [{ ...feature, properties: { ...feature.properties, _depth: depth,
+      source: 'EMODNET_CONTOUR_WFS', layer_class: 'CONTEXT_ONLY' } }];
+  });
+  const levels = [...new Set(valid.map(feature => feature.properties._depth))].sort((a,b)=>a-b);
+  const selected = levels.length <= count ? levels : Array.from({length:count},(_,i)=>
+    levels[Math.round(i * (levels.length - 1)/(count-1))]);
+  const keep = new Set(selected);
+  return {
+    type: 'FeatureCollection',
+    features: valid.filter(feature=>keep.has(feature.properties._depth)),
+    metadata: {
+      role: 'CONTEXT_ONLY_NOT_AOI_DATA',
+      source: 'EMODNET_CONTOUR_WFS',
+      requested_levels: count,
+      displayed_levels_m: selected,
+      native_levels_m: levels,
+      no_interpolation: true
+    }
+  };
+}
