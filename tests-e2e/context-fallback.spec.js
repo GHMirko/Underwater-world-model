@@ -23,7 +23,8 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/Underwater-world-model/');
   await expect(page.locator('#map')).toBeVisible();
   await page.evaluate(() => window.__MSO__.map.jumpTo({ center:[17.23,40.47], zoom:9 }));
-  await page.locator('#operatorTab-chart').click();
+  const chartTab = page.locator('#operatorTab-chart');
+  if ((await chartTab.getAttribute('aria-expanded')) !== 'true') await chartTab.click();
 });
 
 async function drawAoi(page) {
