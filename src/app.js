@@ -485,9 +485,9 @@ map.on('mouseup', () => document.querySelector('#drawAoi').classList.remove('act
 
 map.on('load', () => {
   layers.restore();
-  contours.setBathymetryMode(state.bathyMode);
-  contours.setDensity(state.contourDensity);
-  contours.refresh();
+  // The context/AOI contour authority controller alone manages the
+  // context renderer. Re-applying aoi-adaptive here made the vector family
+  // 'none' after it had been correctly activated by the policy controller.
 });
 
 document.querySelector('#baseMap').addEventListener('change', event => {
@@ -499,7 +499,7 @@ document.querySelector('#bathyMode').addEventListener('change', event => {
   queueMicrotask(updateMarineContextStatus);
   patchState({ bathyMode: event.target.value });
   layers.setBathymetry(event.target.value);
-  contours.setBathymetryMode(event.target.value);
+  // Rendering authority follows state.bathyMode and AOI in one policy only.
   updateLegend();
 });
 
@@ -509,12 +509,10 @@ document.querySelector('#depthOpacity').addEventListener('input', event => {
 
 document.querySelector('#contours').addEventListener('change', event => {
   patchState({ contours: event.target.checked });
-  contours.setVisible(event.target.checked);
 });
 
 document.querySelector('#contourDensity').addEventListener('change', event => {
   patchState({ contourDensity: event.target.value });
-  contours.setDensity(event.target.value);
 });
 document.querySelector('#contourCount').addEventListener('change', event => {
   const requested = Number(event.target.value);
@@ -826,12 +824,9 @@ const experimentWorkspace = attachExperimentWorkspace({
     setBaseMap(map,state.baseMap);
     document.querySelector('#bathyMode').value = state.bathyMode;
     layers.setBathymetry(state.bathyMode);
-    contours.setBathymetryMode(state.bathyMode);
     document.querySelector('#contours').checked = state.contours;
-    contours.setVisible(false); // no remote WFS/WMS isolines
     document.querySelector('#contourDensity').value = state.contourDensity;
     document.querySelector('#contourCount').value = state.contourCount;
-    contours.setDensity(state.contourDensity);
     document.querySelector('#depthOpacity').value = snap.bathymetry_opacity ?? 72;
     layers.setDepthOpacity(Number(document.querySelector('#depthOpacity').value)/100);
     for(const input of document.querySelectorAll('#assets input'))input.checked=state.assets.has(input.value);
