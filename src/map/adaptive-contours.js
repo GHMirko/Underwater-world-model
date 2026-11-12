@@ -1,6 +1,6 @@
 import { maplibregl } from './map-core.js';
 import { SEASCAPE_VECTOR, contourFamilyForBathymetry, emodnetWms } from './config.js';
-import { contourThreshold, filterContours } from './contour-model.js';
+import { contourThreshold, filterContours, selectContextContourLevels } from './contour-model.js';
 
 const SOURCE = 'adaptive-contours-source';
 const LINE = 'adaptive-contours-line';
@@ -22,7 +22,9 @@ export class AdaptiveContours {
   constructor(map, onStatus = () => {}) {
     this.map = map;
     this.onStatus = onStatus;
-    this.visible = true;
+    this.visible = false; // Context contours opt-in only when NO AOI exists.
+    this.contextOnly = false;
+    this.maxContextLevels = 8;
     this.density = 'dense';
     this.bathymetryMode = 'chart-relief';
     this.family = contourFamilyForBathymetry(this.bathymetryMode);
@@ -68,6 +70,19 @@ export class AdaptiveContours {
     if (this.visible) this.refresh();
   }
 
+  setContextOnly(enabled, maxLevels = 8) {
+    this.contextOnly = Boolean(enabled);
+    this.maxContextLevels = Math.max(2, Math.min(30, Number(maxLevels) || 8));
+    if (!this.contextOnly) return;
+    this._removeDense();
+    if (this.visible && this.raw) this._renderVector();
+  }
+
+  setContextCount(count) {
+    this.maxContextLevels = Math.max(2, Math.min(30, Number(count) || 8));
+    if (this.contextOnly && this.visible && this.raw) this._renderVector();
+  }
+
   contextLabel() {
     return this.family === 'emodnet-context'
       ? 'EMODnet isobaths · DIFFERENT SOURCE from GEBCO · context only'
@@ -106,7 +121,7 @@ export class AdaptiveContours {
     const zoom = this.map.getZoom();
     if (zoom < 5) {
       this._renderFallback();
-      this.onStatus(this.contextLabel() + ' · low-zoom WMS overview');
+      this.onStatus('CONTESTO EMODnet · curve WMS originali; dettaglio vettoriale da z5');
       return;
     }
 
@@ -125,7 +140,7 @@ export class AdaptiveContours {
       `https://ows.emodnet-bathymetry.eu/wfs?service=WFS&version=2.0.0&request=GetFeature&typeNames=emodnet:contours&outputFormat=application/json&srsName=EPSG:4326&count=5000&bbox=${bbox},EPSG:4326`
     ];
 
-    this.onStatus(this.contextLabel() + ' · loading vector upgrade…');
+    this.onStatus('CONTESTO EMODnet · ricerca isobate WFS vettoriali…');
     for (const url of urls) {
       try {
         const response = await fetch(url, { signal: requestController.signal, headers: { Accept: 'application/json' } });
@@ -144,7 +159,7 @@ export class AdaptiveContours {
     }
 
     if (!this.visible || this.abortController !== requestController || requestController.signal.aborted) return;
-    this.onStatus(this.contextLabel() + ' · WFS unavailable, WMS context active');
+    this.onStatus('CONTESTO EMODnet · WFS non disponibile: curve WMS di contesto (non AOI)');
   }
 
   _renderDense() {
@@ -169,11 +184,12 @@ export class AdaptiveContours {
 
   _renderVector() {
     if (!this.visible) return;
-    const filtered = filterContours(this.raw, this.map.getZoom());
+    const filtered = this.contextOnly ? selectContextContourLevels(this.raw, this.maxContextLevels)
+      : filterContours(this.raw, this.map.getZoom());
     if (!filtered.features.length) {
       this._clearVector();
       this._renderFallback();
-      this.onStatus(this.contextLabel() + ' · no matching vector isobaths in this view; WMS context remains');
+      this.onStatus('CONTESTO EMODnet · nessuna isobata vettoriale nella vista; WMS di contesto attivo');
       return;
     }
     this._removeFallback();
@@ -185,8 +201,8 @@ export class AdaptiveContours {
         type: 'line',
         source: SOURCE,
         paint: {
-          'line-color': '#f5fbff',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 5, 0.9, 10, 1.6, 13, 2.1, 18, 2.4],
+          'line-color': '#245b73',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 5, 1.1, 10, 1.7, 13, 2.2, 18, 2.4],
           'line-opacity': 0.95
         }
       });
@@ -196,7 +212,12 @@ export class AdaptiveContours {
       this.onStatus(this.contextLabel() + ' · no vector contour in micro-area; detailed isobaths require HR/local bathymetry');
       return;
     }
-    this.onStatus(`${this.contextLabel()}: ${filtered.features.length} features · ${this.markers.length} labels · ≥ ${contourThreshold(this.map.getZoom())} m depth`);
+    if (this.contextOnly) {
+      const selected = filtered.metadata?.displayed_levels_m ?? [];
+      this.onStatus(`CONTESTO EModnet WFS · ${selected.length} livelli pubblicati (max ${this.maxContextLevels}) · ${filtered.features.length} segmenti · non è dato AOI`);
+    } else {
+      this.onStatus(`${this.contextLabel()}: ${filtered.features.length} features · ${this.markers.length} labels · ≥ ${contourThreshold(this.map.getZoom())} m depth`);
+    }
   }
 
   _renderLabels(filtered) {

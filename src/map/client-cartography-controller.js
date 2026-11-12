@@ -304,10 +304,10 @@ function syncContourUi(app) {
   const density = document.querySelector('#contourDensity');
   if (checkbox) { checkbox.disabled = false; checkbox.title = adaptive ? 'Derived locally from best available numeric bathymetry; confidence is shown explicitly.' : ''; }
   if (density) density.disabled = false;
-  // Context WFS/WMS contours are not authoritative for the selected AOI.
-  // Keep them suppressed in every source-selection mode.
-  if (app.contours.visible) app.contours.setVisible(false);
-  renderLocalContourStatus();
+  // This subsystem draws NUMERIC AOI isolines only. It never changes the
+  // separate context renderer state. The dedicated policy controller makes
+  // the pre-AOI / AOI handoff and cancels pending remote context requests.
+  if (state.aoi) renderLocalContourStatus();
 }
 
 function configureClientUi(app) {

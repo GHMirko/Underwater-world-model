@@ -136,3 +136,18 @@
 #seaMapPanel #contourCount{width:100%;font-size:15px;min-height:40px;font-weight:700}
 #seaMapPanel #contourStatus{line-height:1.6}
 #seaMapPanel .source-candidate{font-size:12px}
+
+
+/* v0.29: operationally visible context/AOI contour authority outside the scrollable drawer. */
+.map-contour-status {
+  position:absolute;z-index:6;left:16px;bottom:68px;max-width:min(545px,calc(100% - 38px));
+  padding:7px 11px;border:1px solid #557c90;border-radius:7px;
+  background:rgba(10,29,40,.92);color:#e0f2f9;
+  font:600 11px/1.4 Segoe UI,Arial,sans-serif;
+  pointer-events:none;box-shadow:0 2px 10px #0018;
+}
+.map-contour-status[data-mode=context]{border-color:#72b1cb;}
+.map-contour-status[data-mode=aoi]{border-color:#6ab88c;bottom:143px;}
+.map-contour-status[data-mode=unavailable]{border-color:#bd9654;color:#f4dfb8;}
+@media(max-width:700px){.map-contour-status{left:10px;bottom:126px;font-size:10px;max-width:calc(100% - 20px)}
+.map-contour-status[data-mode=aoi]{bottom:203px}}

@@ -26,7 +26,7 @@ root.innerHTML = `
 <div class="app">
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
-    <span class="badge">GitHub v0.28 AOI Isobaths</span>
+    <span class="badge">GitHub v0.29 Context / AOI Isobaths</span>
 
   </header>
   <div class="workspace">
@@ -42,6 +42,7 @@ root.innerHTML = `
         <div id="placeSearchResults" class="place-search-results"></div>
       </form>
       <div id="depthLegend" class="depth-legend" aria-live="polite"></div>
+      <div id="mapContourStatus" class="map-contour-status" role="status" aria-live="polite">Isobate · verifica sorgente…</div>
     </section>
     <aside class="sidebar">
       <div class="panel" id="landMapPanel">
@@ -55,7 +56,7 @@ root.innerHTML = `
         <h2>Sea / Bathymetry</h2>
         <div id="seaMaskStatus" class="status">Coastline display mask: not initialized.</div>
         <div id="marineContextStatus" class="status">Rilevamento copertura GEBCO / EMODnet…</div>
-        <div class="data-note" id="seaContextNote">Vista operativa: solo isobate ricavate dalla batimetria numerica dell'AOI. Le sorgenti restano selezionabili, ma i raster WMS non vengono disegnati sulla carta terrestre. Senza griglia numerica adeguata non vengono create curve.</div>
+        <div class="data-note" id="seaContextNote">Senza AOI: isobate di CONTESTO EMODnet nelle regioni supportate, solo come riferimento cartografico. Con AOI: esclusivamente isobate NUMERICHE estratte dall'area e sottoposte a controllo qualità. Nessun raster di profondità può ridipingere la terra. La selezione GEBCO non cambia automaticamente i dati numerici.</div>
         <div class="field"><label>Sorgente batimetrica / riferimento (terra invariata)</label><select id="bathyMode">
           <option value="aoi-adaptive">AOI REAL · contesto automatico</option>
           <option value="chart-relief">Chart Relief · sea-only</option>
@@ -66,10 +67,10 @@ root.innerHTML = `
         </select></div>
         <div class="field"><label>Opacità griglia numerica (solo debug)</label><input id="depthOpacity" type="range" min="0" max="100" value="72"></div>
         <label class="debug-control"><input id="debugBathymetryGrid" type="checkbox"> Debug numeric grid · engineering only</label>
-        <label><input id="contours" type="checkbox" checked> Visualizza isobate derivate dall'AOI</label>
+        <label><input id="contours" type="checkbox" checked> Visualizza isobate (contesto prima dell'AOI, numeriche dopo)</label>
         <div class="field"><label for="contourCount">Numero di isobate richieste (2–30)</label>
           <input id="contourCount" type="number" min="2" max="30" step="1" value="8">
-          <small class="field-note">Profondità tra minimo e massimo realmente campionati. Le curve visibili dipendono da risoluzione, attraversamenti e qualità: il numero effettivo può essere inferiore.</small>
+          <small class="field-note">Con AOI: N soglie adattive tra profondità minima e massima osservate, meno curve se il dato non le supporta. Senza AOI: fino a N livelli vettoriali EMODnet già pubblicati; il fallback WMS mantiene i livelli propri della sorgente.</small>
         </div>
         <div class="field"><label>Visualizzazione livelli</label><select id="contourDensity">
           <option value="dense">Tutte le isobate disponibili</option>
@@ -484,9 +485,9 @@ map.on('mouseup', () => document.querySelector('#drawAoi').classList.remove('act
 
 map.on('load', () => {
   layers.restore();
-  contours.setBathymetryMode(state.bathyMode);
-  contours.setDensity(state.contourDensity);
-  contours.refresh();
+  // The context/AOI contour authority controller alone manages the
+  // context renderer. Re-applying aoi-adaptive here made the vector family
+  // 'none' after it had been correctly activated by the policy controller.
 });
 
 document.querySelector('#baseMap').addEventListener('change', event => {
@@ -498,7 +499,7 @@ document.querySelector('#bathyMode').addEventListener('change', event => {
   queueMicrotask(updateMarineContextStatus);
   patchState({ bathyMode: event.target.value });
   layers.setBathymetry(event.target.value);
-  contours.setBathymetryMode(event.target.value);
+  // Rendering authority follows state.bathyMode and AOI in one policy only.
   updateLegend();
 });
 
@@ -508,12 +509,10 @@ document.querySelector('#depthOpacity').addEventListener('input', event => {
 
 document.querySelector('#contours').addEventListener('change', event => {
   patchState({ contours: event.target.checked });
-  contours.setVisible(event.target.checked);
 });
 
 document.querySelector('#contourDensity').addEventListener('change', event => {
   patchState({ contourDensity: event.target.value });
-  contours.setDensity(event.target.value);
 });
 document.querySelector('#contourCount').addEventListener('change', event => {
   const requested = Number(event.target.value);
@@ -825,12 +824,9 @@ const experimentWorkspace = attachExperimentWorkspace({
     setBaseMap(map,state.baseMap);
     document.querySelector('#bathyMode').value = state.bathyMode;
     layers.setBathymetry(state.bathyMode);
-    contours.setBathymetryMode(state.bathyMode);
     document.querySelector('#contours').checked = state.contours;
-    contours.setVisible(false); // no remote WFS/WMS isolines
     document.querySelector('#contourDensity').value = state.contourDensity;
     document.querySelector('#contourCount').value = state.contourCount;
-    contours.setDensity(state.contourDensity);
     document.querySelector('#depthOpacity').value = snap.bathymetry_opacity ?? 72;
     layers.setDepthOpacity(Number(document.querySelector('#depthOpacity').value)/100);
     for(const input of document.querySelectorAll('#assets input'))input.checked=state.assets.has(input.value);
