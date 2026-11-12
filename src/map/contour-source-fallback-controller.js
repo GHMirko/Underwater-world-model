@@ -33,6 +33,11 @@ function status(text, kind = '') {
   if (!node) return;
   node.textContent = text;
   node.className = kind ? 'status ' + kind : 'status';
+  const overlay = document.querySelector('#mapContourStatus');
+  if (overlay) {
+    overlay.textContent = text;
+    overlay.dataset.mode = isContextActive ? 'context' : state.aoi ? 'aoi' : 'unavailable';
+  }
 }
 
 function setContextMode(active) {
@@ -90,7 +95,13 @@ function applyPolicy() {
 // disabled. Only forward genuine context engine messages while it is active.
 const reportEngineStatus = engine.onStatus;
 engine.onStatus = message => {
-  if (isContextActive && !state.aoi && state.contours) reportEngineStatus(message);
+  if (!isContextActive || state.aoi || !state.contours) return;
+  reportEngineStatus(message);
+  const overlay = document.querySelector('#mapContourStatus');
+  if (overlay) {
+    overlay.textContent = message;
+    overlay.dataset.mode = 'context';
+  }
 };
 
 subscribeState((_, patch) => {
