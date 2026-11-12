@@ -39,7 +39,7 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await expect(page.locator('.header .badge').first()).toContainText('v0.28');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.29');
   await expect(page.locator('#baseMap option')).toHaveCount(2);
   await expect(page.locator('#baseMap')).toContainText('Minimal');
   await expect(page.locator('#baseMap')).toContainText('Satellite');
@@ -327,7 +327,7 @@ test('v0.23 GEBCO context WMS remains mounted beyond native scale and labels iso
   expect(current.rasterPresent).toBe(true);
   expect(current.rasterMaxZoom).toBeGreaterThan(17);
   expect(current.rasterSourceMaxZoom).toBe(11);
-  expect(current.contoursPresent).toBe(false);
+  expect(current.contoursPresent).toBe(true);
 });
 
 
