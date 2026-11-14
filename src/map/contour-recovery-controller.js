@@ -285,6 +285,7 @@ subscribeState((next, patch) => {
 
   if (
     Object.prototype.hasOwnProperty.call(patch, 'adaptiveContours') &&
+    next.adaptiveContours != null &&
     next.bathyMode !== 'none' &&
     next.contours &&
     next.aoi &&
