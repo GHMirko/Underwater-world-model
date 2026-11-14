@@ -90,7 +90,7 @@ function applyPolicy() {
   } else if (policy.mode === 'aoi-validated') {
     const s=state.adaptiveContours;
     setStatus('AOI · isobate NUMERICHE · '+(s.requested_levels??state.contourCount)+' richieste / '+
-      (s.available_levels??s.levels_m?.length??0)+' disponibili · qualità di visualizzazione accettata'+
+      (s.available_levels??s.levels_m?.length??0)+' disponibili · confidenza '+(s.confidence??'DA VERIFICARE')+' · qualità di visualizzazione accettata'+
       (policy.contextVisible?' · contesto EMODnet tratteggiato (non analitico)':''),
       'good','aoi-validated');
   } else {
