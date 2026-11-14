@@ -100,7 +100,7 @@ test('REGRESSION: selecting AOI keeps published bathymetry on the map while nume
   await expect.poll(async()=>page.evaluate(()=>
     window.__MSO__.map.queryRenderedFeatures({layers:['adaptive-contours-line']}).length),
     {timeout:12000}).toBeGreaterThan(0);
-  await expect(page.locator('#mapContourStatus')).toContainText(/CONTESTO.*WFS/i);
+  await expect(page.locator('#mapContourStatus')).toContainText('CONTESTO EMODnet');
 });
 
 test('changing bathymetry selection does not change terrain while published context contours remain visible',async({page})=>{
