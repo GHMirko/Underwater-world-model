@@ -79,7 +79,11 @@ test('REGRESSION: selecting AOI keeps published bathymetry on the map while nume
     {timeout:12000}).toBeGreaterThan(0);
   await page.locator('#contourCount').fill('2');
   await page.locator('#contourCount').press('Tab');
-  await expect(page.locator('#mapContourStatus')).toContainText('2 livelli');
+  await expect.poll(async()=>page.evaluate(() => {
+    const m=window.__MSO__.map;
+    return new Set(m.queryRenderedFeatures({layers:['adaptive-contours-line']})
+      .map(feature => feature.properties?._depth)).size;
+  }),{timeout:12000}).toBe(2);
   await drawAoi(page);
   await expect(page.locator('#operatorAoiState')).toHaveText('DEFINITA');
   const policy=await page.evaluate(()=>window.__MSO__.getContourPresentationPolicy());
@@ -119,5 +123,5 @@ test('changing bathymetry selection does not change terrain while published cont
     expect([null,'none']).toContain(result.bathy);
     expect([null,'none']).toContain(result.fallback);
   }
-  await expect(page.locator('#mapContourStatus')).toContainText('EModnet WFS');
+  await expect(page.locator('#mapContourStatus')).toContainText('CONTESTO EMODnet');
 });
