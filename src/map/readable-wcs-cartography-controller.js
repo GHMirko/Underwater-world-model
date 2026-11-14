@@ -1,5 +1,5 @@
 import { state, subscribeState } from '../state.js';
-import { stitchContourSegments } from './contour-quality.js';
+import { stitchContourSegments, contourDisplayAssessment } from './contour-quality.js';
 import { maplibregl } from './map-core.js';
 
 const GRID_LAYER = 'aoi-wcs-grid-layer';
@@ -25,7 +25,9 @@ function waitForApp() {
 function active() {
   return state.bathyMode !== 'none' &&
     state.contours &&
-    state.bathymetryGridSource === 'EMODNET_WCS';
+    state.bathymetryGridSource === 'EMODNET_WCS' &&
+    Boolean(state.aoi) &&
+    contourDisplayAssessment(state.adaptiveContours).displayable;
 }
 
 function injectCss() {
