@@ -39,7 +39,7 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await expect(page.locator('.header .badge').first()).toContainText('v0.29');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.30');
   await expect(page.locator('#baseMap option')).toHaveCount(2);
   await expect(page.locator('#baseMap')).toContainText('Minimal');
   await expect(page.locator('#baseMap')).toContainText('Satellite');
