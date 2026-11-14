@@ -39,7 +39,7 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await expect(page.locator('.header .badge').first()).toContainText('v0.29');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.30');
   await expect(page.locator('#baseMap option')).toHaveCount(2);
   await expect(page.locator('#baseMap')).toContainText('Minimal');
   await expect(page.locator('#baseMap')).toContainText('Satellite');
@@ -270,7 +270,7 @@ test('v0.21 land style switch preserves the marine stack, AOI and numeric data',
 test('v0.22 renders sea context without AOI and does not reset it on land switch', async ({ page }) => {
   await expect(page.locator('#bathyMode')).toHaveValue('aoi-adaptive');
   await expect(page.locator('#aoiStatus')).toContainText('No AOI selected');
-  await expect(page.locator('#seaContextNote')).toContainText('isobate di CONTESTO EMODnet');
+  await expect(page.locator('#seaContextNote')).toContainText('EMODnet di CONTESTO');
   await expect.poll(async () => page.evaluate(() => Boolean(window.__MSO__.map.getLayer('bathymetry-fallback-layer'))), { timeout: 10000 }).toBe(true);
   const before = await page.evaluate(() => {
     const map = window.__MSO__.map;

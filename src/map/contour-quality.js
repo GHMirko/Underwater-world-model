@@ -78,9 +78,16 @@ export function contourDisplayAssessment(summary, options = {}) {
   if (levels < minLevels) reasons.push(`${levels} contour levels < ${minLevels}`);
   if (features < minFeatures) reasons.push(`${features} contour features < ${minFeatures}`);
 
+  // Rendering and analytical fitness are different decisions. A single
+  // measured contour is still useful as clearly qualified *visual context*,
+  // even if the minimum levels/coverage tests fail. Never let QA downgrade
+  // erase valid geometries from the chart. Exports and predictors still
+  // require `ready`, not merely `displayable`.
+  const displayable = levels > 0 && features > 0 && coverage > 0;
   const ready = reasons.length === 0;
   return {
     ready,
+    displayable,
     coverage_ratio: coverage,
     levels,
     features,

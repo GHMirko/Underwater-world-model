@@ -88,7 +88,7 @@ function recoveryReady() {
   return state.bathyMode !== 'none'
     && state.contours
     && state.adaptiveContours?.derivation === 'BOUNDED_DENSER_NUMERIC_RECOVERY'
-    && contourDisplayAssessment(state.adaptiveContours).ready;
+    && contourDisplayAssessment(state.adaptiveContours).displayable;
 }
 
 function ensureLayer(map) {
@@ -221,13 +221,12 @@ async function recover(map, aoi) {
   summary.recovery_samples = valid.length;
   summary.recovery_total = points.length;
   const display = contourDisplayAssessment(summary);
-  summary.display_ready = display.ready;
+  summary.display_ready = display.displayable;
   summary.display_reason = display.reason;
 
   patchState({ adaptiveContours: summary, bathymetryQuality: quality });
 
-  if (!display.ready) {
-    recoveryGeojson = { type: 'FeatureCollection', features: [] };
+  if (!display.displayable) {
     render(map);
     if (status) {
       status.textContent = `CONTEXT ONLY · recovery still insufficient · ${valid.length}/${points.length} samples · ${display.reason}`;
@@ -269,10 +268,9 @@ function rebuildRecoveryContours(map) {
   summary.recovery_samples = validCount;
   summary.recovery_total = totalCount;
   const assessment = contourDisplayAssessment(summary);
-  summary.display_ready = assessment.ready;
+  summary.display_ready = assessment.displayable;
   summary.display_reason = assessment.reason;
   patchState({ adaptiveContours: summary, bathymetryQuality: quality });
-  if (!assessment.ready) recoveryGeojson = { type: 'FeatureCollection', features: [] };
   render(map);
 }
 
@@ -287,6 +285,7 @@ subscribeState((next, patch) => {
 
   if (
     Object.prototype.hasOwnProperty.call(patch, 'adaptiveContours') &&
+    next.adaptiveContours != null &&
     next.bathyMode !== 'none' &&
     next.contours &&
     next.aoi &&

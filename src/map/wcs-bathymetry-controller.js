@@ -166,7 +166,7 @@ function renderContourLabels(map) {
   clearMarkers();
   if (!state.contours || state.bathyMode === 'none' || state.bathymetryGridSource !== 'EMODNET_WCS') return;
   const summary = state.adaptiveContours;
-  if (!contourDisplayAssessment(summary).ready) return;
+  if (!contourDisplayAssessment(summary).displayable) return;
   const stitched = stitchContourSegments(wcsContours);
   const grouped = new Map();
   for (const feature of stitched.features) {
@@ -386,8 +386,8 @@ if (opacitySlider) opacitySlider.addEventListener('input', () => renderGrid(map)
 
 subscribeState((next, patch) => {
   if (Object.prototype.hasOwnProperty.call(patch, 'aoi')) {
-    if (!next.aoi) clear(map);
-    else load(map, next.aoi);
+    clear(map); // invalidate old AOI grid immediately, no stale reassertion
+    if (next.aoi) load(map, next.aoi);
   }
   if (Object.prototype.hasOwnProperty.call(patch, 'baseMap')) {
     setTimeout(() => { renderGrid(map); renderContourLabels(map); }, 120);

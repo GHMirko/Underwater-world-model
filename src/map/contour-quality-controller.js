@@ -42,9 +42,9 @@ function applyQualityPolicy() {
     const summary = state.adaptiveContours;
     const assessment = contourDisplayAssessment(summary);
     const recovery = summary?.derivation === 'BOUNDED_DENSER_NUMERIC_RECOVERY';
-    const ready = adaptive && assessment.ready;
+    const visible = adaptive && Boolean(state.aoi) && assessment.displayable;
 
-    if (map.getSource(LOCAL_SOURCE) && ready && !recovery) {
+    if (map.getSource(LOCAL_SOURCE) && visible && !recovery) {
       const stitched = stitchContourSegments(authoritativeContours());
       map.getSource(LOCAL_SOURCE).setData(stitched);
     }
@@ -52,8 +52,8 @@ function applyQualityPolicy() {
     // This controller is the final authority for derived-contour visibility.
     // WCS numeric contours take precedence over REST/recovery geometry when
     // a full numeric raster has been acquired for the AOI.
-    setVisibility(LOCAL_LAYER, ready && !recovery);
-    setVisibility(RECOVERY_LAYER, ready && recovery && state.bathymetryGridSource !== 'EMODNET_WCS');
+    setVisibility(LOCAL_LAYER, visible && !recovery);
+    setVisibility(RECOVERY_LAYER, visible && recovery && state.bathymetryGridSource !== 'EMODNET_WCS');
     const densityFilter = state.contourDensity === 'major' ? ['==', ['get', 'major'], true] : null;
     if (map.getLayer(LOCAL_LAYER)) map.setFilter(LOCAL_LAYER, densityFilter);
     if (map.getLayer(RECOVERY_LAYER)) map.setFilter(RECOVERY_LAYER, densityFilter);
