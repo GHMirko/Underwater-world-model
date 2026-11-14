@@ -386,8 +386,8 @@ if (opacitySlider) opacitySlider.addEventListener('input', () => renderGrid(map)
 
 subscribeState((next, patch) => {
   if (Object.prototype.hasOwnProperty.call(patch, 'aoi')) {
-    if (!next.aoi) clear(map);
-    else load(map, next.aoi);
+    clear(map); // invalidate old AOI grid immediately, no stale reassertion
+    if (next.aoi) load(map, next.aoi);
   }
   if (Object.prototype.hasOwnProperty.call(patch, 'baseMap')) {
     setTimeout(() => { renderGrid(map); renderContourLabels(map); }, 120);
