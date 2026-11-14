@@ -26,7 +26,7 @@ root.innerHTML = `
 <div class="app">
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
-    <span class="badge">GitHub v0.29 Context / AOI Isobaths</span>
+    <span class="badge">GitHub v0.30 AOI Contour Continuity</span>
 
   </header>
   <div class="workspace">
@@ -56,7 +56,7 @@ root.innerHTML = `
         <h2>Sea / Bathymetry</h2>
         <div id="seaMaskStatus" class="status">Coastline display mask: not initialized.</div>
         <div id="marineContextStatus" class="status">Rilevamento copertura GEBCO / EMODnet…</div>
-        <div class="data-note" id="seaContextNote">Senza AOI: isobate di CONTESTO EMODnet nelle regioni supportate, solo come riferimento cartografico. Con AOI: esclusivamente isobate NUMERICHE estratte dall'area e sottoposte a controllo qualità. Nessun raster di profondità può ridipingere la terra. La selezione GEBCO non cambia automaticamente i dati numerici.</div>
+        <div class="data-note" id="seaContextNote">Le isobate EMODnet di CONTESTO (tratteggiate, non analitiche) restano visibili durante e dopo la selezione AOI. Quelle NUMERICHE AOI sono evidenziate e possono essere provvisorie quando la qualità è insufficiente; in tal caso non vengono approvate per l'export né per i predittori. Nessun raster di profondità ridipinge la terra.</div>
         <div class="field"><label>Sorgente batimetrica / riferimento (terra invariata)</label><select id="bathyMode">
           <option value="aoi-adaptive">AOI REAL · contesto automatico</option>
           <option value="chart-relief">Chart Relief · sea-only</option>
@@ -425,7 +425,11 @@ function updateAoiStatus(aoiValue) {
 }
 
 async function onAoiChanged(aoiValue) {
-  patchState({ aoi: aoiValue, bathymetry: null, bathymetryDiscoveryPlan: null });
+  // Old AOI numerical contours must never be presented as measurements
+  // in a newly drawn AOI. Context WFS remains a separate, persistent layer.
+  patchState({ aoi: aoiValue, bathymetry: null, bathymetryDiscoveryPlan: null,
+    adaptiveContours: null, bathymetryGridSource: null, bathymetryGrid: null,
+    bathymetryQuality: null });
   updateAoiStatus(aoiValue);
   renderBathymetryBroker();
   updateLegend();
@@ -473,7 +477,9 @@ document.querySelector('#clearAoi').addEventListener('click', () => {
   document.querySelector('#drawAoi').classList.remove('active');
   aoi.disable();
   aoi.clear();
-  patchState({ aoi: null, bathymetry: null, bathymetryDiscoveryPlan: null });
+  patchState({ aoi: null, bathymetry: null, bathymetryDiscoveryPlan: null,
+    adaptiveContours: null, bathymetryGridSource: null,
+    bathymetryGrid: null, bathymetryQuality: null });
   updateAoiStatus(null);
   renderBathymetryBroker();
   updateLegend();
