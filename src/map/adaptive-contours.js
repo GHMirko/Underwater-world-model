@@ -203,7 +203,8 @@ export class AdaptiveContours {
         paint: {
           'line-color': '#245b73',
           'line-width': ['interpolate', ['linear'], ['zoom'], 5, 1.1, 10, 1.7, 13, 2.2, 18, 2.4],
-          'line-opacity': 0.95
+          'line-opacity': 0.72,
+          'line-dasharray': [3, 2]  // published CONTEXT, not numeric AOI
         }
       });
     }
