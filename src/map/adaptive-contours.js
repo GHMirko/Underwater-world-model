@@ -206,7 +206,7 @@ export class AdaptiveContours {
           'line-opacity': 0.72,
           'line-dasharray': [3, 2]  // published CONTEXT, not numeric AOI
         }
-      });
+      }, this.map.getLayer('aoi-derived-contours-layer') ? 'aoi-derived-contours-layer' : undefined);
     }
     this._renderLabels(filtered);
     if (!filtered.features.length && this.map.getZoom() >= 14) {
@@ -248,7 +248,9 @@ export class AdaptiveContours {
     this._clearVector();
     if (!this.map.getSource(FALLBACK_SOURCE)) {
       this.map.addSource(FALLBACK_SOURCE, { type: 'raster', tiles: [emodnetWms('emodnet:contours')], tileSize: 256, maxzoom: 13 });
-      this.map.addLayer({ id: FALLBACK_LAYER, type: 'raster', source: FALLBACK_SOURCE, paint: { 'raster-opacity': 0.95 } });
+      this.map.addLayer({ id: FALLBACK_LAYER, type: 'raster', source: FALLBACK_SOURCE,
+        paint: { 'raster-opacity': 0.75 } },
+        this.map.getLayer('aoi-derived-contours-layer') ? 'aoi-derived-contours-layer' : undefined);
     }
   }
 
