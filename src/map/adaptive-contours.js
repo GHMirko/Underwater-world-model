@@ -215,7 +215,7 @@ export class AdaptiveContours {
     }
     if (this.contextOnly) {
       const selected = filtered.metadata?.displayed_levels_m ?? [];
-      this.onStatus(`CONTESTO EModnet WFS · ${selected.length} livelli pubblicati (max ${this.maxContextLevels}) · ${filtered.features.length} segmenti · non è dato AOI`);
+      this.onStatus(`CONTESTO EMODnet WFS · ${selected.length} livelli pubblicati (max ${this.maxContextLevels}) · ${filtered.features.length} segmenti · non è dato AOI`);
     } else {
       this.onStatus(`${this.contextLabel()}: ${filtered.features.length} features · ${this.markers.length} labels · ≥ ${contourThreshold(this.map.getZoom())} m depth`);
     }
