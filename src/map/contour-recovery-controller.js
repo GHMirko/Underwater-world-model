@@ -284,8 +284,7 @@ subscribeState((next, patch) => {
   if (Object.prototype.hasOwnProperty.call(patch, 'contourCount')) rebuildRecoveryContours(map);
 
   if (
-    (Object.prototype.hasOwnProperty.call(patch, 'adaptiveContours') ||
-      Object.prototype.hasOwnProperty.call(patch, 'aoi')) &&
+    Object.prototype.hasOwnProperty.call(patch, 'adaptiveContours') &&
     next.bathyMode !== 'none' &&
     next.contours &&
     next.aoi &&
