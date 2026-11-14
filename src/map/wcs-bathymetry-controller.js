@@ -166,7 +166,7 @@ function renderContourLabels(map) {
   clearMarkers();
   if (!state.contours || state.bathyMode === 'none' || state.bathymetryGridSource !== 'EMODNET_WCS') return;
   const summary = state.adaptiveContours;
-  if (!contourDisplayAssessment(summary).ready) return;
+  if (!contourDisplayAssessment(summary).displayable) return;
   const stitched = stitchContourSegments(wcsContours);
   const grouped = new Map();
   for (const feature of stitched.features) {
