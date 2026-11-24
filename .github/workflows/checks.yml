@@ -19,6 +19,8 @@ jobs:
       - run: npm install
       - name: Unit regression tests
         run: npm test
+      - name: Python ENC converter regression tests
+        run: python3 -m unittest discover -s tests_python -v
       - name: Build static application
         run: npm run build
       - name: Install browser
