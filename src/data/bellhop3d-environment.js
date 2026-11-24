@@ -121,7 +121,8 @@ export function buildBellhop3dEnvironmentInventory({
   svpRequiredDepthM = null,
   svpPolicy = undefined,
   bathymetrySelection = null,
-  bathymetryDiscoveryPlan = null
+  bathymetryDiscoveryPlan = null,
+  coastalBathymetryModel = null
 }) {
   if (!aoi) throw new Error('Define an AOI before preparing Bellhop3D environmental inputs');
   const buffer = Number(propagationBufferM);
@@ -213,6 +214,16 @@ export function buildBellhop3dEnvironmentInventory({
       vertical_datum: 'UNRESOLVED — bathymetry, sea level and source/receiver depths must be aligned'
     },
     inventory,
+    coastal_chart_bathymetry: coastalBathymetryModel ? {
+      schema:coastalBathymetryModel.schema,
+      source_id:coastalBathymetryModel.source?.id,
+      interpolation_method:coastalBathymetryModel.method,
+      computational_step_m:coastalBathymetryModel.grid?.nominal_step_m,
+      coverage_ratio:coastalBathymetryModel.coverage_ratio,
+      status:'PROVISIONAL_CHART_RECONSTRUCTION_NOT_BELLHOP_READY',
+      required_validations:coastalBathymetryModel.bellhop3d_gate?.blocking_gates ?? [],
+      note:'SOUNDG/DEPCNT/DEPARE reconstruction; no validated 3D bottom is available from this input yet'
+    } : null,
     environmental_request: environmentalRequest,
     derived_workflow: [
       { id: 'pressure', inputs: ['depth', 'latitude', 'sea_level'], status: 'NOT_COMPUTED', note: 'Pressure conversion depends on vertical reference and units.' },
@@ -231,6 +242,7 @@ export function buildBellhop3dEnvironmentInventory({
       completed_and_validated_inputs: [],
       blocking_gates: [
         'ACQUIRE_NUMERIC_BATHY_AND_FULL_3D_WATER_COLUMN',
+        ...(coastalBathymetryModel ? coastalBathymetryModel.bellhop3d_gate.blocking_gates : []),
         ...(buffer > 0 && bathymetrySelection ? ['RECHECK_HR_BATHYMETRY_COVERAGE_FOR_EXPANDED_DOMAIN'] : []),
         'VERIFY_SPACE_TIME_VERTICAL_DATUM_AND_UNCERTAINTY',
         'COMPUTE_AND_VALIDATE_SOUND_SPEED_3D_FIELD',
