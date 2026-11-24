@@ -1,6 +1,7 @@
 import './styles.css';
 import { createOperatorWorkspace } from './ui/operator-workspace.js';
 import { attachExperimentWorkspace } from './experiments/experiment-workspace.js';
+import { attachCoastalHydrography } from './ui/coastal-hydrography-controller.js';
 import { createMap, setBaseMap } from './map/map-core.js';
 import { initializeSeaCoastlineMask } from './map/sea-coastline-controller.js';
 import { attachPlaceSearch } from './map/place-search.js';
@@ -26,7 +27,7 @@ root.innerHTML = `
 <div class="app">
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
-    <span class="badge">GitHub v0.30 AOI Contour Continuity</span>
+    <span class="badge">GitHub v0.31 ENC Coastal Hydrography</span>
 
   </header>
   <div class="workspace">
@@ -135,6 +136,39 @@ root.innerHTML = `
           <button id="downloadBathyPlan" class="btn" disabled>Bathymetry plan JSON</button>
         </div>
         <div class="data-note">The broker ranks sources by role, coverage, resolution, access and fitness. Regional inclusion never implies actual dataset coverage: discovery/coverage tests remain explicit gates.</div>
+      </div>
+
+      <div class="panel" id="coastalHydrographyPanel">
+        <h2>ENC / Coastal Hydrography</h2>
+        <div class="data-note">Ricostruzione batimetrica da oggetti cartografici: SOUNDG=misure, DEPCNT=vincoli d'isobata, DEPARE/DRGARE=intervalli e maschera, M_QUAL=qualità. Modello <b>provvisorio</b>, non automaticamente idoneo a Bellhop3D.</div>
+        <div class="field"><label for="coastalImportFile">Importa ENC convertita in GeoJSON</label>
+          <input id="coastalImportFile" type="file" accept=".geojson,.json,application/geo+json,application/json">
+          <small class="field-note">Le ENC S-57 .000 vanno convertite localmente con il tool Python/GDAL prima dell'importazione. I file originali .001/.002 di aggiornamento rimangono accanto alla .000.</small>
+        </div>
+        <div class="request-actions">
+          <a class="btn btn-link" target="_blank" rel="noopener noreferrer" href="https://github.com/GHMirko/Underwater-world-model/blob/main/tools/enc_to_geojson.py">Tool S-57 → GeoJSON</a>
+          <a class="btn btn-link" target="_blank" rel="noopener noreferrer" href="https://charts.noaa.gov/ENCs/ENCs.shtml">NOAA ENC gratuite</a>
+        </div>
+        <button id="coastalFetchPuglia" class="btn" style="width:100%">Acquisisci isobate Regione Puglia nell'AOI</button>
+        <div id="coastalSourceStatus" class="status">Nessuna fonte costiera importata.</div>
+        <div class="field"><label for="coastalDatum">Datum verticale / chart datum dichiarato</label>
+          <input id="coastalDatum" type="text" value="UNVERIFIED" maxlength="100">
+          <small class="field-note">Etichetta documentale, non validazione automatica. Il datum va verificato e riconciliato con maree, DTM e geometrie acustiche prima di Bellhop3D.</small>
+        </div>
+        <div class="row">
+          <div class="field"><label for="coastalGridM">Passo griglia computazionale (m)</label>
+            <input id="coastalGridM" type="number" min="5" max="1000" value="50"></div>
+          <div class="field"><label for="coastalRadiusM">Raggio massimo supporto (m)</label>
+            <input id="coastalRadiusM" type="number" min="5" max="5000" value="400"></div>
+        </div>
+        <button id="coastalBuildModel" class="btn primary" style="width:100%" disabled>Ricostruisci fondale PROVVISORIO per l'AOI</button>
+        <div id="coastalModelStatus" class="status">Nessuna griglia ricostruita.</div>
+        <div class="request-actions">
+          <button id="coastalDownloadSource" class="btn" disabled>Esporta vincoli GeoJSON</button>
+          <button id="coastalDownloadModel" class="btn" disabled>Esporta griglia JSON</button>
+          <button id="coastalDownloadXyz" class="btn" disabled>Esporta XYZ/CSV</button>
+        </div>
+        <div class="data-note">La superficie interpolata da carte <b>non sostituisce</b> un rilievo MBES, non aumenta la risoluzione nativa e non viene usata automaticamente dal motore acustico. Verificare licenza Puglia, aggiornamento ENC, CATZOC e riferimento verticale.</div>
       </div>
 
       <div class="panel" id="environmentPanel">
@@ -566,7 +600,8 @@ document.querySelector('#buildEnvRequest').addEventListener('click', () => {
       analysisGridM: Number(document.querySelector('#analysisGridM').value),
       variables,
       bathymetrySelection: state.bathymetrySource,
-      bathymetryDiscoveryPlan: state.bathymetryDiscoveryPlan
+      bathymetryDiscoveryPlan: state.bathymetryDiscoveryPlan,
+      coastalBathymetryModel: coastalHydrography.getModel()
     });
     const copernicus = currentEnvRequest.source_jobs.filter(job => job.provider === 'Copernicus Marine').length;
     const publicOgc = currentEnvRequest.source_jobs.filter(job => job.execution === 'PUBLIC_OGC').length;
@@ -597,7 +632,7 @@ document.querySelector('#downloadManifest').addEventListener('click', () => {
 
 document.querySelector('#downloadWorldModel').addEventListener('click', () => {
   if (!currentEnvRequest) return;
-  downloadJson('world-model-aoi-package.json', buildWorldModelPackage({ state, environmentalRequest: currentEnvRequest }));
+  downloadJson('world-model-aoi-package.json', buildWorldModelPackage({ state, environmentalRequest: currentEnvRequest, coastalModel: coastalHydrography.getModel() }));
 });
 
 document.querySelector('#downloadAoi').addEventListener('click', () => {
@@ -757,6 +792,14 @@ subscribeState((next, patch) => {
   if (Object.prototype.hasOwnProperty.call(patch, 'bathyMode')) queueMicrotask(updateMarineContextStatus);
 });
 
+const coastalHydrography = attachCoastalHydrography({
+  root,map,
+  onChange:()=>{
+    invalidateAcousticInventory();
+    experimentWorkspace?.markDirty();
+  }
+});
+
 const experimentWorkspace = attachExperimentWorkspace({
   root,
   getSnapshot: () => ({
@@ -769,6 +812,7 @@ const experimentWorkspace = attachExperimentWorkspace({
     contour_density: state.contourDensity,
     contour_count: state.contourCount,
     isobaths_geojson: getAoiIsobaths() ?? null,
+    ...coastalHydrography.snapshot(),
     bathymetry_opacity: Number(document.querySelector('#depthOpacity').value),
     max_operating_depth_m: Number(document.querySelector('#maxDepth').value),
     selected_assets: [...state.assets],
@@ -792,7 +836,7 @@ const experimentWorkspace = attachExperimentWorkspace({
     environment_request: currentEnvRequest ?? null,
     acoustic_inventory: currentAcousticInventory ?? null,
     world_model_package: currentEnvRequest && state.aoi
-      ? buildWorldModelPackage({ state, environmentalRequest: currentEnvRequest }) : null,
+      ? buildWorldModelPackage({ state, environmentalRequest: currentEnvRequest, coastalModel: coastalHydrography.getModel() }) : null,
     svp_candidates: svpCandidates,
     optimization_result_text: document.querySelector('#results').textContent?.trim() || null,
     data_integrity: {
@@ -873,6 +917,7 @@ const experimentWorkspace = attachExperimentWorkspace({
     document.querySelector('#results').textContent=snap.optimization_result_text
       ?'RISULTATO SNAPSHOT (non rieseguito): '+snap.optimization_result_text
       :'';
+    coastalHydrography.restore(snap);
     updateAoiStatus(state.aoi);
     renderBathymetryBroker();
     renderSpatialAdequacy();
@@ -893,4 +938,4 @@ document.querySelector('#acousticEnvironmentPanel').addEventListener('input',()=
 document.querySelector('#assets').addEventListener('change',()=>experimentWorkspace.markDirty());
 document.querySelector('#optimize').addEventListener('click',()=>experimentWorkspace.markDirty());
 
-window.__MSO__ = { map, layers, contours, operatorUI, experimentWorkspace, aoi, state, updateLegend, fitToAoi, buildEnvironmentalRequest, buildBellhop3dEnvironmentInventory, getAcousticInventory: () => currentAcousticInventory, buildWorldModelPackage, aoiDimensionsMeters, resolutionAssessment };
+window.__MSO__ = { map, layers, contours, operatorUI, experimentWorkspace, coastalHydrography, aoi, state, updateLegend, fitToAoi, buildEnvironmentalRequest, buildBellhop3dEnvironmentInventory, getAcousticInventory: () => currentAcousticInventory, buildWorldModelPackage, aoiDimensionsMeters, resolutionAssessment };

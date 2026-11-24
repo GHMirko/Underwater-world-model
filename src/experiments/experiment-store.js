@@ -183,6 +183,8 @@ export async function saveExperimentFolder(dir,doc){
   if(!snapshot.environment_request)await clearGeneratedFile(dir,['world-model'],'environmental-request.json');
   if(!snapshot.isobaths_geojson)await clearGeneratedFile(dir,['world-model'],'isobaths.geojson');
   if(!snapshot.world_model_package)await clearGeneratedFile(dir,['world-model'],'world-model-package.json');
+  if(!snapshot.coastal_hydrography)await clearGeneratedFile(dir,['inputs','derived'],'coastal-hydrography.json');
+  if(!snapshot.coastal_model)await clearGeneratedFile(dir,['world-model'],'coastal-chart-reconstruction.json');
   if(!snapshot.acoustic_inventory)await clearGeneratedFile(dir,['acoustic'],'bellhop3d-environment.json');
   if(!snapshot.svp_candidates?.length)await clearGeneratedFile(dir,['inputs','raw'],'svp-observations-imported.json');
   if(snapshot.aoi){
@@ -201,6 +203,14 @@ export async function saveExperimentFolder(dir,doc){
   if(snapshot.isobaths_geojson){
     const p=await ensureSubdir(dir,['world-model']);
     await writeFile(p,'isobaths.geojson',JSON.stringify(snapshot.isobaths_geojson,null,2));
+  }
+  if(snapshot.coastal_hydrography){
+    const p=await ensureSubdir(dir,['inputs','derived']);
+    await writeFile(p,'coastal-hydrography.json',JSON.stringify(snapshot.coastal_hydrography,null,2));
+  }
+  if(snapshot.coastal_model){
+    const p=await ensureSubdir(dir,['world-model']);
+    await writeFile(p,'coastal-chart-reconstruction.json',JSON.stringify(snapshot.coastal_model,null,2));
   }
   if(snapshot.world_model_package){
     const p=await ensureSubdir(dir,['world-model']);

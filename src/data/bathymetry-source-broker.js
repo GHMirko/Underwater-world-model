@@ -163,6 +163,44 @@ export const BATHYMETRY_SOURCE_CATALOG = Object.freeze([
     note: 'Coverage is selective and MUST be tested. Geographic inclusion in Liguria does not imply dataset coverage.'
   }),
   Object.freeze({
+    id: 'NOAA_FREE_ENC_S57',
+    metadata_url: 'https://charts.noaa.gov/ENCs/ENCs.shtml',
+    label: 'NOAA official free ENC S-57 (Approach / Harbour / Berthing)',
+    provider: 'NOAA Office of Coast Survey',
+    scope: 'US_COAST_AND_TERRITORIES_CANDIDATE',
+    coverage: [-180, 14, -60, 73],
+    role: 'HYDROGRAPHIC_CONSTRAINT',
+    source_class: 'ENC_VECTOR',
+    execution: 'USER_SUPPLIED',
+    access: 'FREE_MANUAL_DOWNLOAD',
+    licence: 'CHECK_NOAA_PRODUCT_TERMS',
+    typical_resolution_m: null,
+    vertical_datum: 'CELL_METADATA_REQUIRED',
+    formats: ['S-57 .000 plus .001 updates', 'GeoJSON via GDAL'],
+    base_score: 82, viewer: true,
+    predictor: 'VALIDATED_CONSTRAINED_RECONSTRUCTION_ONLY',
+    note: 'Free NOAA sample ENC. SOUNDG/DEPCNT/DEPARE/M_QUAL are distinct evidence; chart scale is not measured grid resolution. Check individual cell coverage.'
+  }),
+  Object.freeze({
+    id: 'PUGLIA_PUBLIC_BATIMETRIA',
+    metadata_url: 'https://webapps.sit.puglia.it/arcgis/rest/services/ServicesArcIMS/batimetria/MapServer/0',
+    label: 'Regione Puglia published contour lines (Z metres)',
+    provider: 'Regione Puglia - SIT',
+    scope: 'PUGLIA_SELECTIVE',
+    coverage: [14.4,39.2,19.3,42.5],
+    role: 'HYDROGRAPHIC_CONSTRAINT',
+    source_class: 'REGIONAL_CONTOUR_VECTOR',
+    execution: 'PUBLIC_ARCGIS_REST',
+    access: 'PUBLIC_QUERY_CORS_SUBJECT_TO_SERVICE',
+    licence: 'CHECK_REGIONE_PUGLIA_TERMS',
+    typical_resolution_m: null,
+    vertical_datum: 'NOT_DOCUMENTED_IN_SERVICE_LAYER',
+    formats: ['ArcGIS REST JSON', 'GeoJSON normalized'],
+    base_score: 84, viewer: true,
+    predictor: 'VALIDATED_CONSTRAINED_RECONSTRUCTION_ONLY',
+    note: 'Public isobaths with negative Z. Not ENC and not measured DTM. Vertical datum, licence and local coverage unverified.'
+  }),
+  Object.freeze({
     id: 'ENC_S57_S101',
     metadata_url: 'https://iho.int/en/encs',
     label: 'Official ENC S-57 / S-101',
@@ -296,7 +334,7 @@ function applicability(source, aoi) {
 
 function availability(source) {
   if (source.execution === 'USER_SUPPLIED' || source.execution === 'LICENSED_OR_USER_SUPPLIED') return 'USER_OR_LICENCE_REQUIRED';
-  if (source.execution === 'PUBLIC_OGC' || source.execution === 'SUBSET_DOWNLOAD_OR_OPENDAP' || source.execution === 'API_OR_DOWNLOAD') return 'QUERYABLE';
+  if (source.execution === 'PUBLIC_OGC' || source.execution === 'SUBSET_DOWNLOAD_OR_OPENDAP' || source.execution === 'API_OR_DOWNLOAD' || source.execution === 'PUBLIC_ARCGIS_REST') return 'QUERYABLE';
   if (source.execution === 'DERIVATION_REQUIRED') return 'DERIVATION_REQUIRED';
   if (source.execution === 'COVERAGE_TEST_REQUIRED') return 'COVERAGE_TEST_REQUIRED';
   return 'DISCOVERY_REQUIRED';

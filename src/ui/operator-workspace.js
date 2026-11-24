@@ -3,7 +3,7 @@
 const GROUPS = [
   {id:'chart',name:'Carta',subtitle:'Terra e batimetria',symbol:'◫',panels:['landMapPanel','seaMapPanel']},
   {id:'mission',name:'Missione',subtitle:'Esperimenti e area operativa',symbol:'⌖',panels:['experimentPanel','missionPanel']},
-  {id:'data',name:'Dati',subtitle:'Fonti e World Model',symbol:'▤',panels:['bathyBrokerPanel','environmentPanel']},
+  {id:'data',name:'Dati',subtitle:'Fonti e World Model',symbol:'▤',panels:['bathyBrokerPanel','coastalHydrographyPanel','environmentPanel']},
   {id:'acoustic',name:'Acustica',subtitle:'Ambiente e Bellhop3D',symbol:'◉',panels:['acousticEnvironmentPanel']},
   {id:'assets',name:'Assetti',subtitle:'Assetti e ottimizzazione',symbol:'⤨',panels:['assetsPanel','optimizerPanel']}
 ];

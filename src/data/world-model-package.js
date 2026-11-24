@@ -84,7 +84,7 @@ function sourceLayer(job) {
   };
 }
 
-export function buildWorldModelPackage({ state, environmentalRequest }) {
+export function buildWorldModelPackage({ state, environmentalRequest, coastalModel = null }) {
   if (!state?.aoi) throw new Error('AOI is required for the World Model Package');
   if (!environmentalRequest) throw new Error('Build the Environmental Data Request before the World Model Package');
   return {
@@ -137,6 +137,18 @@ export function buildWorldModelPackage({ state, environmentalRequest }) {
     },
     layers: {
       bathymetry: bathymetryLayer(state, environmentalRequest),
+      coastal_chart_reconstruction: coastalModel ? {
+        schema:coastalModel.schema,
+        status:coastalModel.bellhop3d_gate.status,
+        source:coastalModel.source,
+        method:coastalModel.method,
+        grid:coastalModel.grid,
+        coverage_ratio:coastalModel.coverage_ratio,
+        native_resolution_unknown:true,
+        predictor_input:false,
+        required_validations:coastalModel.bellhop3d_gate.blocking_gates,
+        note:'Chart-derived provisional grid, not automatically analysis-ready Bellhop3D bathymetry'
+      } : null,
       source_jobs: (environmentalRequest.source_jobs ?? []).filter(job => !['emodnet-bathymetry', 'emodnet-hr-bathymetry', 'gebco-2026-bathymetry'].includes(job.id)).map(sourceLayer),
       planned_derived_products: environmentalRequest.derived_products ?? []
     },

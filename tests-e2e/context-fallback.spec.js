@@ -47,7 +47,7 @@ async function drawAoi(page) {
 }
 
 test('regression: published EMODnet isobaths render BEFORE AOI in Taranto without altering terrain',async({page})=>{
-  await expect(page.locator('.header .badge').first()).toContainText('v0.30');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.31');
   await expect(page.locator('#operatorAoiState')).toHaveText('NON DEFINITA');
   await expect(page.locator('#contourCount')).toHaveValue('8');
   await expect.poll(async()=>page.evaluate(() =>
