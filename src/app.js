@@ -306,7 +306,11 @@ function refreshContourExport() {
 }
 
 function updateLegend() {
-  renderDepthLegend(legendEl, state.bathyMode, state.bathymetry);
+  const numeric=localContoursMatchSource(state.bathyMode,state.bathymetryGridSource);
+  const bathymetry=state.bathyMode==='gebco-global'
+    ?state.gebcoNumericRange
+    :numeric?(state.bathymetryGrid??state.bathymetry):null;
+  renderDepthLegend(legendEl,state.bathyMode,bathymetry);
 }
 
 function utcInputValue(date) {
