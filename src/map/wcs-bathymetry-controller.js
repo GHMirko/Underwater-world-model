@@ -194,8 +194,8 @@ function renderContourLabels(map) {
 
 function renderLegend() {
   const element = document.querySelector('#depthLegend');
-  if (!element || state.bathyMode === 'none' || !lastGrid) return;
-  renderDepthLegend(element, 'aoi-adaptive', lastGrid);
+  if (!element || !lastGrid || !localContoursMatchSource(state.bathyMode,'EMODNET_WCS')) return;
+  renderDepthLegend(element, state.bathyMode, lastGrid);
 }
 
 function clear(map) {
