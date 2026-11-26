@@ -8,6 +8,8 @@ export const state = {
   bathymetryQuality: null,
   bathymetryDiscoveryPlan: null,
   adaptiveContours: null,
+  gebcoContoursSummary: null,
+  coastalSourceRevision: 0,
   baseMap: 'minimal',
   bathyMode: 'aoi-adaptive',
   contours: true,
