@@ -18,9 +18,9 @@ test('EMODnet WCS URL requests the numeric mean-depth GeoTIFF for the AOI', () =
 test('GeoTIFF raster cells become georeferenced numeric bathymetry samples', () => {
   const grid = rasterToBathymetryGrid({
     values: new Float32Array([
-      4, 8, 12,
-      6, -9999, 18,
-      9, 15, 24
+      -4, -8, -12,
+      -6, -9999, -18,
+      -9, -15, -24
     ]),
     width: 3,
     height: 3,
@@ -38,12 +38,12 @@ test('GeoTIFF raster cells become georeferenced numeric bathymetry samples', () 
   assert.equal(grid.samples.at(-1).depth, 24);
 });
 
-test('positive-down semantics retain zero-depth shallow cells and reject opposite-sign values', () => {
+test('EMODnet elevation-positive-up semantics convert negative marine elevation and reject positive land', () => {
   const grid = rasterToBathymetryGrid({
     values: new Float32Array([
-      0, 0.4, 1.8,
-      -3, -9999, 6,
-      2, 4, 8
+      0, -0.4, -1.8,
+      3, -9999, -6,
+      -2, -4, -8
     ]),
     width: 3,
     height: 3,
@@ -58,10 +58,10 @@ test('positive-down semantics retain zero-depth shallow cells and reject opposit
 test('shallow WCS grid can derive local contours below the official 50 m contour product', () => {
   const grid = rasterToBathymetryGrid({
     values: new Float32Array([
-      3, 7, 12, 16,
-      4, 9, 14, 19,
-      6, 11, 17, 23,
-      8, 13, 20, 28
+      -3, -7, -12, -16,
+      -4, -9, -14, -19,
+      -6, -11, -17, -23,
+      -8, -13, -20, -28
     ]),
     width: 4,
     height: 4,
@@ -72,6 +72,21 @@ test('shallow WCS grid can derive local contours below the official 50 m contour
   assert.ok(scheme.levels.some(level => level.depth_m < 50));
   assert.ok(contours.features.length > 0);
   assert.ok(contours.features.every(feature => feature.properties.depth_m < 50));
+});
+
+test('vertical convention is explicit and positive land elevations do not become plausible bathymetry', () => {
+  const values = new Float32Array([-5,-8,3,7,-20,-28,-9999,-30,10]);
+  const converted = rasterToBathymetryGrid({
+    values,width:3,height:3,bbox:[17,40,17.003,40.003],noData:-9999
+  });
+  assert.equal(converted.source_vertical_convention,'elevation-positive-up');
+  assert.equal(converted.valid_cells,5);
+  assert.deepEqual(converted.samples.map(sample=>sample.depth),[5,8,20,28,30]);
+  const explicit = rasterToBathymetryGrid({
+    values:new Float32Array([5,8,9,10]),width:2,height:2,
+    bbox:[17,40,17.002,40.002],verticalConvention:'depth-positive-down'
+  });
+  assert.equal(explicit.min,5);
 });
 
 test('wide shallow AOI respects operator-selected count rather than adding undocumented extra levels', () => {

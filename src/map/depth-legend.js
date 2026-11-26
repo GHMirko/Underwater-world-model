@@ -104,7 +104,18 @@ export function legendModel(mode, bathymetry = null) {
 }
 
 export function renderDepthLegend(element, mode, bathymetry = null) {
-  const model = legendModel(mode === 'none' ? 'none' : 'aoi-adaptive', bathymetry);
+  // No fake colour legend for vector WFS or unvalidated chart-only layers.
+  const numerical = ['aoi-adaptive','emodnet-multicolour','gebco-global'].includes(mode);
+  const model = numerical ? legendModel('aoi-adaptive', bathymetry) : null;
+  if(model) {
+    if(mode==='gebco-global') {
+      model.title='GEBCO 2026 · AOI NUMERICA';
+      model.subtitle='Isoipse derivate dal GeoTIFF importato · datum da verificare';
+    }else if(mode==='emodnet-multicolour'){
+      model.title='EMODnet WCS · AOI NUMERICA';
+      model.subtitle='Isobate dalla griglia WCS reale · profondità positive verso il basso';
+    }
+  }
   if (!model) {
     element.hidden = true;
     element.innerHTML = '';

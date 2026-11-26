@@ -39,7 +39,7 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  await expect(page.locator('.header .badge').first()).toContainText('v0.31');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.32');
   await expect(page.locator('#baseMap option')).toHaveCount(2);
   await expect(page.locator('#baseMap')).toContainText('Minimal');
   await expect(page.locator('#baseMap')).toContainText('Satellite');
@@ -144,7 +144,7 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
 
   await page.locator('#bathyMode').selectOption('emodnet-rainbow');
   await page.waitForTimeout(500);
-  await expect(page.locator('#depthLegend')).toContainText('AOI REAL bathymetry');
+  await expect(page.locator('#depthLegend')).toBeHidden(); // WFS has native contour levels, not a numeric colour range
   const contextState = await page.evaluate(() => ({
     wms: Boolean(window.__MSO__.map.getLayer('bathymetry-layer')),
     numericVisibility: window.__MSO__.map.getLayoutProperty('aoi-depth-grid-layer', 'visibility'),
@@ -153,7 +153,8 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
   expect(contextState.wms).toBe(true);
   expect(await page.evaluate(() => window.__MSO__.map.getLayoutProperty('bathymetry-layer','visibility'))).toBe('none');
   expect(contextState.numericVisibility).toBe('none');
-  expect(contextState.localContourVisibility).toBe('visible');
+  expect(contextState.localContourVisibility).toBe('none');
+  await expect(page.locator('#selectedBathyDataStatus')).toContainText('WFS');
 
   await page.locator('#bathyMode').selectOption('aoi-adaptive');
   await page.waitForTimeout(300);
@@ -270,7 +271,7 @@ test('v0.21 land style switch preserves the marine stack, AOI and numeric data',
 test('v0.22 renders sea context without AOI and does not reset it on land switch', async ({ page }) => {
   await expect(page.locator('#bathyMode')).toHaveValue('aoi-adaptive');
   await expect(page.locator('#aoiStatus')).toContainText('No AOI selected');
-  await expect(page.locator('#seaContextNote')).toContainText('EMODnet di CONTESTO');
+  await expect(page.locator('#seaContextNote')).toContainText('AUTO mantiene il contesto EMODnet');
   await expect.poll(async () => page.evaluate(() => Boolean(window.__MSO__.map.getLayer('bathymetry-fallback-layer'))), { timeout: 10000 }).toBe(true);
   const before = await page.evaluate(() => {
     const map = window.__MSO__.map;
@@ -327,7 +328,7 @@ test('v0.23 GEBCO context WMS remains mounted beyond native scale and labels iso
   expect(current.rasterPresent).toBe(true);
   expect(current.rasterMaxZoom).toBeGreaterThan(17);
   expect(current.rasterSourceMaxZoom).toBe(11);
-  expect(current.contoursPresent).toBe(true);
+  expect(current.contoursPresent).toBe(false);
 });
 
 
@@ -437,7 +438,7 @@ test('v0.25 AOI REAL selects global GEBCO in Malaysia and EMODnet in Europe', as
   await expect(page.locator('#bathyMode')).toHaveValue('aoi-adaptive');
   await page.evaluate(() => window.__MSO__.map.jumpTo({ center:[119.2,0.9], zoom:8 }));
   await expect.poll(async () => page.evaluate(() => window.__MSO__.layers.getContextBathymetry()), { timeout: 8000 }).toBe('gebco-global');
-  await expect(page.locator('#marineContextStatus')).toContainText('GEBCO 2026');
+  await expect(page.locator('#marineContextStatus')).toContainText('AUTO');
   const sea = await page.evaluate(() => {
     const map = window.__MSO__.map;
     return {
@@ -457,7 +458,7 @@ test('v0.25 AOI REAL selects global GEBCO in Malaysia and EMODnet in Europe', as
   expect(sea.seaMask).toBe(true);
   await page.evaluate(() => window.__MSO__.map.jumpTo({center:[15,43],zoom:8}));
   await expect.poll(async () => page.evaluate(() => window.__MSO__.layers.getContextBathymetry()), { timeout: 8000 }).toBe('emodnet-multicolour');
-  await expect(page.locator('#marineContextStatus')).toContainText('EMODnet regional');
+  await expect(page.locator('#marineContextStatus')).toContainText('AUTO');
 });
 
 
@@ -491,8 +492,12 @@ test('v0.28 counts are recomputed from AOI numeric samples, not new WMS layers',
   expect(after.source).toBe(initial.source);
   expect(after.terrain).toBe(initial.terrain);
   expect([null,'none']).toContain(after.sourceRaster);
-  expect(after.localContour).toBe('visible');
+  expect(after.localContour).toBe('none');
+  await expect(page.locator('#selectedBathyDataStatus')).toContainText('importare');
   await page.locator('#contourCount').fill('11');
   await page.locator('#contourCount').press('Tab');
+  await expect.poll(async()=>page.evaluate(()=>window.__MSO__.state.contourCount), {timeout:10000}).toBe(11);
+  await page.locator('#bathyMode').selectOption('aoi-adaptive');
   await expect.poll(async()=>page.evaluate(()=>window.__MSO__.state.adaptiveContours?.requested_levels), {timeout:10000}).toBe(11);
+  await expect.poll(async()=>page.evaluate(()=>window.__MSO__.map.getLayoutProperty('aoi-derived-contours-layer','visibility')),{timeout:10000}).toBe('visible');
 });

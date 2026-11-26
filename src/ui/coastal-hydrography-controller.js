@@ -3,7 +3,7 @@ import { reconstructCoastalSeafloor, coastalModelCsv } from '../data/chart-const
 import { fetchPugliaContours } from '../data/puglia-coastal-source.js';
 import { buildAdaptiveContours, chooseContourScheme } from '../map/local-contours.js';
 import { downloadJson, downloadText } from '../data/download.js';
-import { state, subscribeState } from '../state.js';
+import { state, patchState, subscribeState } from '../state.js';
 
 const IDS={
   input:'coastal-import-source', inputLines:'coastal-import-lines',
@@ -49,7 +49,7 @@ export function attachCoastalHydrography({
     statusText(modelStatus,`Griglia derivata ${g.nx}×${g.ny}, passo COMPUTAZIONALE ${g.nominal_step_m} m · copertura ${(model.coverage_ratio*100).toFixed(1)}% · ${ev.soundings} scandagli, ${ev.contours} curve · Bellhop3D: BLOCCATO, datum/QA non validati`,model.coverage_ratio?'warn':'warn');
   };
   function updateMap(){
-    if(!map.isStyleLoaded?.())return;
+    if(!map.getLayer('background'))return;
     const inputFeatures=dataset?.geometry?.features.filter(f=>
       f.properties.chart_object==='DEPCNT'||f.properties.chart_object==='SOUNDG')??[];
     const inputCollection={type:'FeatureCollection',features:inputFeatures};
@@ -68,6 +68,10 @@ export function attachCoastalHydrography({
     mapLayer(map,IDS.derivedLines,'line',IDS.derived,{
       'line-color':'#d79533','line-width':2.2,'line-opacity':0.92,'line-dasharray':[5,2]
     });
+    const visible=state.contours && state.bathyMode==='coastal-charts' ? 'visible':'none';
+    for(const id of [IDS.inputLines,IDS.inputSoundings,IDS.derivedLines]){
+      if(map.getLayer(id))map.setLayoutProperty(id,'visibility',visible);
+    }
   }
   const invalidateModel=()=>{
     if(!model)return;
@@ -91,6 +95,9 @@ export function attachCoastalHydrography({
   }
   function commitDataset(next){
     dataset=next;model=null;derivedContours=EMPTY;
+    patchState({bathyMode:'coastal-charts'});
+    const picker=q('bathyMode');
+    if(picker)picker.value='coastal-charts';
     displayData();displayModel();toggleButtons();updateMap();onChange();
   }
   q('coastalImportFile').addEventListener('change',async event=>{
@@ -153,6 +160,8 @@ export function attachCoastalHydrography({
       rebuildDerivedPreview();updateMap();
     }
     if(Object.prototype.hasOwnProperty.call(patch,'aoi')){displayModel();toggleButtons();}
+    if(Object.prototype.hasOwnProperty.call(patch,'bathyMode') ||
+       Object.prototype.hasOwnProperty.call(patch,'contours'))updateMap();
   });
   displayData();displayModel();toggleButtons();
   if(map.isStyleLoaded?.())updateMap();

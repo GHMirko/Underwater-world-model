@@ -4,6 +4,7 @@ import { state, patchState, subscribeState } from '../state.js';
 import { setBaseMap, maplibregl } from './map-core.js';
 import { AOI_ADAPTIVE_PALETTE, renderDepthLegend } from './depth-legend.js';
 import { assessBathymetryConfidence, buildAdaptiveContours, chooseContourScheme, contourSummary } from './local-contours.js';
+import { localContoursMatchSource } from './bathymetry-source-policy.js';
 
 const SOURCE_ID = 'aoi-depth-grid-source';
 const LAYER_ID = 'aoi-depth-grid-layer';
@@ -97,11 +98,12 @@ function clearContourMarkers() {
 }
 
 function localContoursVisible() {
-  return state.bathyMode !== 'none' && state.contours;
+  return Boolean(state.aoi) && state.contours && localContoursMatchSource(state.bathyMode,state.bathymetryGridSource);
 }
 
 function ensureLayer(map) {
-  if (!map.isStyleLoaded()) return false;
+  // Remote raster loading does not prevent editing an existing style graph.
+  if (!map.getLayer('background')) return false;
   if (!map.getSource(SOURCE_ID)) map.addSource(SOURCE_ID, { type: 'geojson', data: lastGeojson });
   if (!map.getLayer(LAYER_ID)) {
     map.addLayer({ id: LAYER_ID, type: 'circle', source: SOURCE_ID, layout: { visibility: numericGridVisible() ? 'visible' : 'none' }, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 2, 16, 4, 18, 7, 21, 13], 'circle-color': adaptiveColorExpression(), 'circle-opacity': currentOpacity(), 'circle-blur': 0.08, 'circle-stroke-color': 'rgba(255,255,255,0.78)', 'circle-stroke-width': 0.8 } });
@@ -170,7 +172,7 @@ function scheduleRender(map) {
   for (const timer of restoreTimers) clearTimeout(timer);
   restoreTimers.clear();
   const tryRender = attempt => {
-    if (map.isStyleLoaded()) {
+    if (map.getLayer('background')) {
       try { if (render(map)) return; } catch { /* style still settling */ }
     }
     if (attempt >= 12) return;
@@ -184,8 +186,9 @@ function scheduleRender(map) {
 function renderLegend() {
   const element = document.querySelector('#depthLegend');
   if (!element) return;
-  const bathymetryForLegend = state.bathyMode === 'aoi-adaptive' ? (lastRange ?? state.bathymetry) : state.bathymetry;
-  renderDepthLegend(element, state.bathyMode, bathymetryForLegend);
+  const numeric = localContoursMatchSource(state.bathyMode,state.bathymetryGridSource);
+  const range = numeric ? (state.bathymetryGrid ?? lastRange ?? state.bathymetry) : null;
+  renderDepthLegend(element,state.bathyMode,range);
 }
 
 function renderLocalContourStatus() {
@@ -276,6 +279,9 @@ async function loadAoiGrid(map, aoi, status) {
 }
 
 function rebuildContoursFromCachedSamples(map) {
+  // WCS numerical grid owns its isolines; REST cached samples must not
+  // overwrite the authoritative layer when the operator changes N.
+  if (state.bathymetryGridSource === 'EMODNET_WCS') return;
   if (!lastRange || !lastQuality || !lastShape || !lastSamples.length) return;
   lastContourScheme = chooseContourScheme(lastRange.min, lastRange.max, state.contourCount);
   lastContourGeojson = buildAdaptiveContours({
@@ -320,7 +326,9 @@ function configureClientUi(app) {
   }
   const bathySelect = document.querySelector('#bathyMode');
   if (bathySelect) {
-    bathySelect.innerHTML = `<option value="aoi-adaptive">AOI REAL · isobate numeriche</option><option value="emodnet-multicolour">EMODnet (sorgente, nessun raster sulla terra)</option><option value="emodnet-rainbow">EMODnet Rainbow (solo riferimento)</option><option value="gebco-global">GEBCO (solo riferimento globale)</option><option value="chart-relief">Chart Relief (solo riferimento)</option><option value="none">None</option>`;
+    // Never replace the operator source-selection menu from a secondary controller.
+    if (![...bathySelect.options].some(option=>option.value===state.bathyMode))
+      patchState({bathyMode:'aoi-adaptive'});
     bathySelect.value = state.bathyMode;
   }
   layers.setBathymetry(state.bathyMode);

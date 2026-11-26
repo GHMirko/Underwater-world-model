@@ -19,18 +19,25 @@ export function buildEmodnetWcsUrl(aoi, resolution = EMODNET_STANDARD_RESOLUTION
   return `https://ows.emodnet-bathymetry.eu/wcs?${params.toString()}`;
 }
 
-function finiteDepth(value, noData) {
+export function finiteDepth(value, noData, verticalConvention = 'elevation-positive-up') {
+  if (value == null) return null;
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return null;
   if (Number.isFinite(noData) && Math.abs(numeric - noData) < 1e-9) return null;
-  // EMODnet DTM convention is positive-down depth. Do not use abs(): doing so
-  // can silently turn an opposite-sign/topographic value into plausible water depth.
-  // Zero is retained because LAT/intertidal/shallow-water cells can legitimately
-  // approach 0 m and are separated from land by the explicit no-land water mask.
-  return numeric >= 0 && numeric < 12000 ? numeric : null;
+  // EMODnet WCS returns bottom ELEVATION (negative below datum), not
+  // positive-down depth. Positive elevations must never become sea depths.
+  // The convention is selectable only for other explicitly documented grids.
+  if (verticalConvention === 'elevation-positive-up')
+    return numeric <= 0 && numeric > -12000 ? -numeric : null;
+  if (verticalConvention === 'depth-positive-down')
+    return numeric >= 0 && numeric < 12000 ? numeric : null;
+  throw Error('Unsupported raster vertical convention: '+verticalConvention);
 }
 
-export function rasterToBathymetryGrid({ values, width, height, bbox, noData = NaN }) {
+export function rasterToBathymetryGrid({
+  values, width, height, bbox, noData = NaN,
+  verticalConvention = 'elevation-positive-up'
+}) {
   if (!Number.isInteger(width) || !Number.isInteger(height) || width < 2 || height < 2) {
     throw new Error('EMODnet WCS raster dimensions are invalid');
   }
@@ -50,7 +57,7 @@ export function rasterToBathymetryGrid({ values, width, height, bbox, noData = N
     const south = north - dy;
     for (let ix = 0; ix < width; ix += 1) {
       const raw = values[iy * width + ix];
-      const depth = finiteDepth(raw, noData);
+      const depth = finiteDepth(raw, noData, verticalConvention);
       if (!Number.isFinite(depth)) continue;
       const west = minLon + ix * dx;
       const east = west + dx;
@@ -73,7 +80,9 @@ export function rasterToBathymetryGrid({ values, width, height, bbox, noData = N
     min: Math.min(...depths),
     max: Math.max(...depths),
     mean: depths.reduce((sum, value) => sum + value, 0) / depths.length,
-    bbox: [minLon, minLat, maxLon, maxLat]
+    bbox: [minLon, minLat, maxLon, maxLat],
+    source_vertical_convention: verticalConvention,
+    output_vertical_convention: 'depth-positive-down'
   };
 }
 

@@ -85,7 +85,7 @@ test('chart relief elevation stops are strictly ascending', () => {
 });
 
 test('viewer bathymetry separates AOI numeric mode from context WMS and source-matches contours', () => {
-  assert.deepEqual(Object.keys(BATHYMETRY), ['aoi-adaptive', 'chart-relief', 'emodnet-rainbow', 'gebco-global', 'emodnet-multicolour', 'none']);
+  assert.deepEqual(Object.keys(BATHYMETRY), ['aoi-adaptive', 'chart-relief', 'emodnet-rainbow', 'gebco-global', 'emodnet-multicolour', 'coastal-charts', 'none']);
   assert.equal(BATHYMETRY['aoi-adaptive'].numeric, true);
   assert.equal(contourFamilyForBathymetry('aoi-adaptive'), 'none');
   assert.equal(contourFamilyForBathymetry('chart-relief'), 'seascape');

@@ -6,6 +6,7 @@ import { AOI_ADAPTIVE_PALETTE, renderDepthLegend } from './depth-legend.js';
 import { assessBathymetryConfidence, buildAdaptiveContours, chooseContourScheme, contourSummary } from './local-contours.js';
 import { contourDisplayAssessment, stitchContourSegments } from './contour-quality.js';
 import { maplibregl } from './map-core.js';
+import { localContoursMatchSource } from './bathymetry-source-policy.js';
 
 const GRID_SOURCE = 'aoi-wcs-grid-source';
 const GRID_LAYER = 'aoi-wcs-grid-layer';
@@ -47,7 +48,7 @@ function currentOpacity() {
 }
 
 function numericGridVisible() {
-  return state.bathyMode !== 'none' && Boolean(lastGrid) && Boolean(state.debugBathymetryGrid);
+  return localContoursMatchSource(state.bathyMode,'EMODNET_WCS') && Boolean(lastGrid) && Boolean(state.debugBathymetryGrid);
 }
 
 function adaptiveExpression(range) {
@@ -101,7 +102,7 @@ function cellsToGeojson(cells) {
 }
 
 function ensureGridLayer(map) {
-  if (!map.isStyleLoaded()) return false;
+  if (!map.getLayer('background')) return false;
   if (!map.getSource(GRID_SOURCE)) map.addSource(GRID_SOURCE, { type: 'geojson', data: gridGeojson });
   if (!map.getLayer(GRID_LAYER)) {
     map.addLayer({
@@ -164,7 +165,7 @@ function featureMidpoint(feature) {
 
 function renderContourLabels(map) {
   clearMarkers();
-  if (!state.contours || state.bathyMode === 'none' || state.bathymetryGridSource !== 'EMODNET_WCS') return;
+  if (!state.contours || !localContoursMatchSource(state.bathyMode,state.bathymetryGridSource) || state.bathymetryGridSource !== 'EMODNET_WCS') return;
   const summary = state.adaptiveContours;
   if (!contourDisplayAssessment(summary).displayable) return;
   const stitched = stitchContourSegments(wcsContours);
@@ -193,8 +194,8 @@ function renderContourLabels(map) {
 
 function renderLegend() {
   const element = document.querySelector('#depthLegend');
-  if (!element || state.bathyMode === 'none' || !lastGrid) return;
-  renderDepthLegend(element, 'aoi-adaptive', lastGrid);
+  if (!element || !lastGrid || !localContoursMatchSource(state.bathyMode,'EMODNET_WCS')) return;
+  renderDepthLegend(element, state.bathyMode, lastGrid);
 }
 
 function clear(map) {
