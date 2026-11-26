@@ -1,23 +1,38 @@
 import { contourDisplayAssessment } from './contour-quality.js';
+import { localContoursMatchSource, publishedContextAllowed, sourceSpec } from './bathymetry-source-policy.js';
 
 /**
- * Cartography must not disappear while an AOI numeric extraction runs.
- * Published EMODnet context contours remain visible where geographically
- * relevant, throughout the AOI lifecycle. They are never upgraded to AOI
- * measurements; an accepted numeric AOI layer is a distinct overlay.
+ * Source-matched visual authority.
+ * AUTO retains truthful labelled EMODnet context beneath its numeric AOI.
+ * Explicit WCS hides published WFS; explicit WFS hides derived WCS.
+ * GEBCO/ENC never fall back silently to EMODnet.
  */
-export function contourPresentationPolicy({ aoi, contours, bathyMode, hasRegionalContext, summary }) {
+export function contourPresentationPolicy({
+  aoi, contours, bathyMode, hasRegionalContext, summary,
+  bathymetryGridSource = null, gebcoAvailable = false, coastalAvailable = false
+}) {
   const enabled = Boolean(contours) && bathyMode !== 'none';
+  const spec = sourceSpec(bathyMode);
   const assessment = contourDisplayAssessment(summary);
+  const sourceMatched = localContoursMatchSource(bathyMode,bathymetryGridSource);
+  const contextVisible = enabled && publishedContextAllowed(bathyMode,hasRegionalContext);
+  const numericVisible = enabled && Boolean(aoi) && sourceMatched && assessment.displayable;
+  const numericQaAccepted = numericVisible && assessment.ready;
+  const mode = !enabled ? 'off'
+    : bathyMode === 'gebco-global' ? (gebcoAvailable ? 'gebco-imported' : 'gebco-await')
+    : bathyMode === 'coastal-charts' ? (coastalAvailable ? 'coastal-imported' : 'coastal-await')
+    : bathyMode === 'chart-relief' ? 'legacy-disabled'
+    : bathyMode === 'emodnet-rainbow' ? (contextVisible ? 'published-only' : 'unavailable')
+    : !aoi ? (contextVisible ? 'context' : 'unavailable')
+    : numericQaAccepted ? 'aoi-validated'
+    : numericVisible ? 'aoi-provisional'
+    : contextVisible ? 'aoi-context-fallback' : 'aoi-numeric-unavailable';
   return {
-    contextVisible: enabled && Boolean(hasRegionalContext),
-    numericVisible: enabled && Boolean(aoi) && assessment.displayable,
-    numericQaAccepted: enabled && Boolean(aoi) && assessment.ready,
-    numericAssessment: assessment,
-    mode: !enabled ? 'off'
-      : !aoi ? (hasRegionalContext ? 'context' : 'unavailable')
-      : assessment.ready ? 'aoi-validated'
-      : assessment.displayable ? 'aoi-provisional'
-      : hasRegionalContext ? 'aoi-context-fallback' : 'aoi-unavailable'
+    selected_source:spec.authority,
+    contextVisible,
+    numericVisible,
+    numericQaAccepted,
+    numericAssessment:assessment,
+    mode
   };
 }
