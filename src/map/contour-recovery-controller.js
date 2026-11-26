@@ -288,6 +288,7 @@ subscribeState((next, patch) => {
     Object.prototype.hasOwnProperty.call(patch, 'adaptiveContours') &&
     next.adaptiveContours != null &&
     next.bathyMode === 'aoi-adaptive' &&
+    next.bathymetryGridSource !== 'EMODNET_WCS' &&
     next.contours &&
     next.aoi &&
     !contourDisplayAssessment(next.adaptiveContours).ready
