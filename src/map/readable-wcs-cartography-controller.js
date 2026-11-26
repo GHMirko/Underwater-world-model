@@ -1,6 +1,7 @@
 import { state, subscribeState } from '../state.js';
 import { stitchContourSegments, contourDisplayAssessment } from './contour-quality.js';
 import { maplibregl } from './map-core.js';
+import { localContoursMatchSource } from './bathymetry-source-policy.js';
 
 const GRID_LAYER = 'aoi-wcs-grid-layer';
 const COASTAL_LAYER = 'aoi-wcs-coastal-layer';
@@ -23,7 +24,7 @@ function waitForApp() {
 }
 
 function active() {
-  return state.bathyMode !== 'none' &&
+  return localContoursMatchSource(state.bathyMode,state.bathymetryGridSource) &&
     state.contours &&
     state.bathymetryGridSource === 'EMODNET_WCS' &&
     Boolean(state.aoi) &&
