@@ -102,7 +102,7 @@ function cellsToGeojson(cells) {
 }
 
 function ensureGridLayer(map) {
-  if (!map.isStyleLoaded()) return false;
+  if (!map.getLayer('background')) return false;
   if (!map.getSource(GRID_SOURCE)) map.addSource(GRID_SOURCE, { type: 'geojson', data: gridGeojson });
   if (!map.getLayer(GRID_LAYER)) {
     map.addLayer({
