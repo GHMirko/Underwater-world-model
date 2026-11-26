@@ -23,7 +23,7 @@ async function openData(page){
 }
 
 test('v0.31 chart objects reconstruct a non-certified numerical seafloor without painting on land',async({page})=>{
-  await expect(page.locator('.header .badge').first()).toContainText('v0.31');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.32');
   await drawAoi(page);
   await openData(page);
   const aoi=await page.evaluate(()=>window.__MSO__.state.aoi);
