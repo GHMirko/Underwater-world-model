@@ -185,8 +185,9 @@ function scheduleRender(map) {
 function renderLegend() {
   const element = document.querySelector('#depthLegend');
   if (!element) return;
-  const bathymetryForLegend = state.bathyMode === 'aoi-adaptive' ? (lastRange ?? state.bathymetry) : state.bathymetry;
-  renderDepthLegend(element, state.bathyMode, bathymetryForLegend);
+  const numeric = localContoursMatchSource(state.bathyMode,state.bathymetryGridSource);
+  const range = numeric ? (state.bathymetryGrid ?? lastRange ?? state.bathymetry) : null;
+  renderDepthLegend(element,state.bathyMode,range);
 }
 
 function renderLocalContourStatus() {
