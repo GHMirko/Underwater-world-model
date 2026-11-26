@@ -103,8 +103,8 @@ function applyPolicy(){
     case 'context':setStatus('AUTO · CONTESTO EMODnet WFS · selezionare AOI per il DTM numerico','',
       'context');break;
     case 'aoi-context-fallback':setStatus('AUTO · DTM numerico AOI in acquisizione/insufficiente: curve EMODnet WFS di contesto mantenute, NON numeriche AOI','warn','context-with-aoi');break;
-    case 'aoi-provisional':setStatus('AOI · DTM numerico EMODnet · '+state.contourCount+' richieste / '+(state.adaptiveContours?.available_levels??0)+' disponibili · PROVVISORIE · QA insufficiente','warn','aoi-provisional');break;
-    case 'aoi-validated':setStatus('AOI · DTM numerico EMODnet · '+state.contourCount+' richieste / '+(state.adaptiveContours?.available_levels??0)+' disponibili · controllo qualità superato','good','aoi-validated');break;
+    case 'aoi-provisional':setStatus('AOI · isobate numeriche DTM EMODnet · '+state.contourCount+' richieste / '+(state.adaptiveContours?.available_levels??0)+' disponibili · confidenza '+(state.adaptiveContours?.confidence??'ND')+' · PROVVISORIE · QA insufficiente','warn','aoi-provisional');break;
+    case 'aoi-validated':setStatus('AOI · isobate numeriche DTM EMODnet · '+state.contourCount+' richieste / '+(state.adaptiveContours?.available_levels??0)+' disponibili · confidenza '+(state.adaptiveContours?.confidence??'ND')+' · controllo qualità superato','good','aoi-validated');break;
     case 'gebco-await':setStatus('GEBCO 2026 selezionato · importare subset GeoTIFF numerico per mostrare isobate, nessun dato EMODnet sostitutivo','warn','unavailable');break;
     case 'gebco-imported':setStatus('GEBCO 2026 · '+state.contourCount+' richieste / '+(state.gebcoContoursSummary?.available_levels??0)+' isobate disponibili · dato importato, datum da verificare','good','aoi-provisional');break;
     case 'coastal-await':setStatus('ENC/Puglia selezionata · acquisire oggetti idrografici dal pannello Dati','warn','unavailable');break;
