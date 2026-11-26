@@ -31,7 +31,8 @@ function display(map){
   map.setFilter(LAYER,state.contourDensity==='major'?['==',['get','major'],true]:null);
 }
 function publishSummary(){
-  patchState({gebcoContoursSummary:summary});
+  patchState({gebcoContoursSummary:summary,
+    gebcoNumericRange:gridBundle?{min:gridBundle.data.min,max:gridBundle.data.max}:null});
 }
 function recalc(map){
   if(!gridBundle){summary=null;contours=EMPTY;publishSummary();display(map);return;}
