@@ -144,7 +144,7 @@ test('critical flow keeps numeric grids as debug while preserving confidence-awa
 
   await page.locator('#bathyMode').selectOption('emodnet-rainbow');
   await page.waitForTimeout(500);
-  await expect(page.locator('#depthLegend')).toContainText('AOI REAL bathymetry');
+  await expect(page.locator('#depthLegend')).toBeHidden(); // WFS has native contour levels, not a numeric colour range
   const contextState = await page.evaluate(() => ({
     wms: Boolean(window.__MSO__.map.getLayer('bathymetry-layer')),
     numericVisibility: window.__MSO__.map.getLayoutProperty('aoi-depth-grid-layer', 'visibility'),
