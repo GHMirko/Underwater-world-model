@@ -90,7 +90,7 @@ test('REGRESSION: selecting AOI keeps published bathymetry on the map while nume
   expect(policy.mode).toBe('aoi-context-fallback');
   expect(policy.contextVisible).toBe(true);
   expect(policy.numericVisible).toBe(false);
-  await expect(page.locator('#mapContourStatus')).toContainText(/AOI.*CONTESTO EMODnet mantenuto/i);
+  await expect(page.locator('#mapContourStatus')).toContainText(/AOI.*contesto mantenut/i);
   await expect.poll(async()=>page.evaluate(()=>
     window.__MSO__.map.queryRenderedFeatures({layers:['adaptive-contours-line']}).length),
     {timeout:12000}).toBeGreaterThan(0);
