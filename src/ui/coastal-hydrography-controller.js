@@ -49,7 +49,7 @@ export function attachCoastalHydrography({
     statusText(modelStatus,`Griglia derivata ${g.nx}×${g.ny}, passo COMPUTAZIONALE ${g.nominal_step_m} m · copertura ${(model.coverage_ratio*100).toFixed(1)}% · ${ev.soundings} scandagli, ${ev.contours} curve · Bellhop3D: BLOCCATO, datum/QA non validati`,model.coverage_ratio?'warn':'warn');
   };
   function updateMap(){
-    if(!map.isStyleLoaded?.())return;
+    if(!map.getLayer('background'))return;
     const inputFeatures=dataset?.geometry?.features.filter(f=>
       f.properties.chart_object==='DEPCNT'||f.properties.chart_object==='SOUNDG')??[];
     const inputCollection={type:'FeatureCollection',features:inputFeatures};
