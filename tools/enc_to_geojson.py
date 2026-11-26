@@ -23,7 +23,10 @@ import sys
 import tempfile
 
 ENC_LAYERS = ("SOUNDG", "DEPCNT", "DEPARE", "DRGARE", "M_QUAL",
-              "COALNE", "WRECKS", "OBSTRN", "UNSARE")
+              "COALNE", "WRECKS", "OBSTRN", "UNSARE", "M_COVR", "RESARE", "ACHARE", "ACHBRT", "UWTROC",
+              "CBLARE", "DMPGRD", "DWRTPT", "FAIRWY", "ICNARE", "ISTZNE",
+              "MARCUL", "MIPARE", "OSPARE", "PIPARE", "PRCARE", "SPLARE",
+              "SUBTLN", "TESARE", "TSSCRS", "TSSLPT", "TSSRON")
 MAX_FEATURES = 50000
 
 

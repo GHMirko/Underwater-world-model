@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.beforeEach(async({page})=>{
   await page.route(/^https?:\/\/(?!127\.0\.0\.1:4173).*/,route=>route.abort());
-  await page.goto('/Underwater-world-model/');
+  await page.goto('/Underwater-world-model/console.html');
   await expect(page.locator('#map')).toBeVisible();
   await page.evaluate(()=>window.__MSO__.map.jumpTo({center:[17.22,40.49],zoom:13}));
 });

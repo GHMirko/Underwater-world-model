@@ -8,7 +8,7 @@ test('REAL source selector changes actual isobaths; imported GEBCO N changes geo
     status:200,contentType:'application/json',body:JSON.stringify({avg:-24.2})
   }));
   await page.route(/^https?:\/\/(?!127\.0\.0\.1:4173|rest\.emodnet-bathymetry\.eu).*/,r=>r.abort());
-  await page.goto('/Underwater-world-model/');
+  await page.goto('/Underwater-world-model/console.html');
   await expect(page.locator('.header .badge')).toContainText('v0.32');
   const tab=page.locator('#operatorTab-chart');
   if((await tab.getAttribute('aria-expanded'))!=='true')await tab.click();

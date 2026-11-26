@@ -29,7 +29,7 @@ test.beforeEach(async ({ page }) => {
   await page.route('https://ows.emodnet-bathymetry.eu/wfs?**', route =>
     route.fulfill({status:200,contentType:'application/json',
       body:JSON.stringify(contextForRequest(route.request().url()))}));
-  await page.goto('/Underwater-world-model/');
+  await page.goto('/Underwater-world-model/console.html');
   await expect(page.locator('#map')).toBeVisible();
   await page.evaluate(() => window.__MSO__.map.jumpTo({ center:[17.23,40.47], zoom:9 }));
   const chartTab = page.locator('#operatorTab-chart');

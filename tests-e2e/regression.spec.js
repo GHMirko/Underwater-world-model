@@ -10,7 +10,7 @@ test.beforeEach(async ({ page }) => {
   });
   await page.route(/^https?:\/\/(?!127\.0\.0\.1:4173|rest\.emodnet-bathymetry\.eu).*/, route => route.abort());
 
-  await page.goto('/Underwater-world-model/');
+  await page.goto('/Underwater-world-model/console.html');
   await expect(page.locator('#map')).toBeVisible();
   await page.waitForTimeout(800);
   await openPanel(page, 'chart');
