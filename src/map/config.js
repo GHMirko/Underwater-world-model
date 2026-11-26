@@ -57,6 +57,7 @@ export const BATHYMETRY = {
     provider: 'emodnet',
     contourFamily: 'emodnet'
   },
+  'coastal-charts': { name: 'ENC / Puglia · source-derived contours', layer: null, provider: 'coastal', contourFamily: 'none' },
   none: { name: 'None', layer: null, provider: null, contourFamily: 'none' }
 };
 
