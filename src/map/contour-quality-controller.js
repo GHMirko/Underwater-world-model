@@ -1,5 +1,6 @@
 import { state, subscribeState } from '../state.js';
 import { contourDisplayAssessment, stitchContourSegments } from './contour-quality.js';
+import { localContoursMatchSource } from './bathymetry-source-policy.js';
 
 const LOCAL_SOURCE = 'aoi-derived-contours-source';
 const LOCAL_LAYER = 'aoi-derived-contours-layer';
@@ -38,7 +39,7 @@ function applyQualityPolicy() {
   if (applying || !map.isStyleLoaded()) return;
   applying = true;
   try {
-    const adaptive = state.bathyMode !== 'none' && state.contours;
+    const adaptive = localContoursMatchSource(state.bathyMode,state.bathymetryGridSource) && state.contours;
     const summary = state.adaptiveContours;
     const assessment = contourDisplayAssessment(summary);
     const recovery = summary?.derivation === 'BOUNDED_DENSER_NUMERIC_RECOVERY';
