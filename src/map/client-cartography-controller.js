@@ -278,6 +278,9 @@ async function loadAoiGrid(map, aoi, status) {
 }
 
 function rebuildContoursFromCachedSamples(map) {
+  // WCS numerical grid owns its isolines; REST cached samples must not
+  // overwrite the authoritative layer when the operator changes N.
+  if (state.bathymetryGridSource === 'EMODNET_WCS') return;
   if (!lastRange || !lastQuality || !lastShape || !lastSamples.length) return;
   lastContourScheme = chooseContourScheme(lastRange.min, lastRange.max, state.contourCount);
   lastContourGeojson = buildAdaptiveContours({
