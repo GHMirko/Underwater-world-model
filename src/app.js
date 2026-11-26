@@ -779,6 +779,7 @@ subscribeState((next, patch) => {
 const coastalHydrography = attachCoastalHydrography({
   root,map,
   onChange:()=>{
+    patchState({coastalSourceRevision:(state.coastalSourceRevision??0)+1});
     invalidateAcousticInventory();
     experimentWorkspace?.markDirty();
   }
@@ -798,6 +799,7 @@ const experimentWorkspace = attachExperimentWorkspace({
     isobaths_geojson: getAoiIsobaths() ?? null,
     ...coastalHydrography.snapshot(),
     gebco_file_metadata: window.__MSO__?.getGebcoSourceMetadata?.() ?? null,
+    selected_bathymetry_data_authority:sourceSpec(state.bathyMode).authority,
     bathymetry_opacity: Number(document.querySelector('#depthOpacity').value),
     max_operating_depth_m: Number(document.querySelector('#maxDepth').value),
     selected_assets: [...state.assets],
