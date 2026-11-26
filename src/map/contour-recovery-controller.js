@@ -4,6 +4,7 @@ import { aoiDimensionsMeters } from './spatial-scale.js';
 import { assessBathymetryConfidence, buildAdaptiveContours, chooseContourScheme, contourSummary } from './local-contours.js';
 import { contourDisplayAssessment, stitchContourSegments } from './contour-quality.js';
 import { maplibregl } from './map-core.js';
+import { localContoursMatchSource } from './bathymetry-source-policy.js';
 
 const NATIVE_GRID_M = 115;
 const SOURCE_ID = 'aoi-recovery-contours-source';
@@ -85,7 +86,7 @@ function clearMarkers() {
 }
 
 function recoveryReady() {
-  return state.bathyMode !== 'none'
+  return state.bathyMode === 'aoi-adaptive'
     && state.contours
     && state.adaptiveContours?.derivation === 'BOUNDED_DENSER_NUMERIC_RECOVERY'
     && contourDisplayAssessment(state.adaptiveContours).displayable;
@@ -286,7 +287,7 @@ subscribeState((next, patch) => {
   if (
     Object.prototype.hasOwnProperty.call(patch, 'adaptiveContours') &&
     next.adaptiveContours != null &&
-    next.bathyMode !== 'none' &&
+    next.bathyMode === 'aoi-adaptive' &&
     next.contours &&
     next.aoi &&
     !contourDisplayAssessment(next.adaptiveContours).ready
