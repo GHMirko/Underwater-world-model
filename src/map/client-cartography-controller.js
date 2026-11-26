@@ -102,7 +102,8 @@ function localContoursVisible() {
 }
 
 function ensureLayer(map) {
-  if (!map.isStyleLoaded()) return false;
+  // Remote raster loading does not prevent editing an existing style graph.
+  if (!map.getLayer('background')) return false;
   if (!map.getSource(SOURCE_ID)) map.addSource(SOURCE_ID, { type: 'geojson', data: lastGeojson });
   if (!map.getLayer(LAYER_ID)) {
     map.addLayer({ id: LAYER_ID, type: 'circle', source: SOURCE_ID, layout: { visibility: numericGridVisible() ? 'visible' : 'none' }, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 2, 16, 4, 18, 7, 21, 13], 'circle-color': adaptiveColorExpression(), 'circle-opacity': currentOpacity(), 'circle-blur': 0.08, 'circle-stroke-color': 'rgba(255,255,255,0.78)', 'circle-stroke-width': 0.8 } });
@@ -171,7 +172,7 @@ function scheduleRender(map) {
   for (const timer of restoreTimers) clearTimeout(timer);
   restoreTimers.clear();
   const tryRender = attempt => {
-    if (map.isStyleLoaded()) {
+    if (map.getLayer('background')) {
       try { if (render(map)) return; } catch { /* style still settling */ }
     }
     if (attempt >= 12) return;
