@@ -21,7 +21,7 @@ const map = app.map;
 let applying = false;
 
 function setVisibility(layerId, visible) {
-  if (!map.isStyleLoaded() || !map.getLayer(layerId)) return;
+  if (!map.getLayer(layerId)) return;
   const desired = visible ? 'visible' : 'none';
   if (map.getLayoutProperty(layerId, 'visibility') !== desired) {
     map.setLayoutProperty(layerId, 'visibility', desired);
@@ -36,7 +36,7 @@ function authoritativeContours() {
 }
 
 function applyQualityPolicy() {
-  if (applying || !map.isStyleLoaded()) return;
+  if (applying || !map.getLayer('background')) return;
   applying = true;
   try {
     const adaptive = localContoursMatchSource(state.bathyMode,state.bathymetryGridSource) && state.contours;
