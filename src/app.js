@@ -11,6 +11,7 @@ import { AoiController } from './map/aoi-controller.js';
 import { AdaptiveContours } from './map/adaptive-contours.js';
 import { renderDepthLegend } from './map/depth-legend.js';
 import { stitchContourSegments, contourDisplayAssessment } from './map/contour-quality.js';
+import { sourceSpec, localContoursMatchSource } from './map/bathymetry-source-policy.js';
 import { aoiDimensionsMeters, formatMeters, recommendedZoomForAoi, resolutionAssessment } from './map/spatial-scale.js';
 import { sampleAoiBathymetry } from './data/emodnet.js';
 import { buildBellhop3dEnvironmentInventory } from './data/bellhop3d-environment.js';
@@ -27,7 +28,7 @@ root.innerHTML = `
 <div class="app">
   <header class="header">
     <h1>Underwater Mission Optimizer</h1>
-    <span class="badge">GitHub v0.31 ENC Coastal Hydrography</span>
+    <span class="badge">GitHub v0.32 Source-Matched Bathymetry</span>
 
   </header>
   <div class="workspace">
@@ -57,21 +58,28 @@ root.innerHTML = `
         <h2>Sea / Bathymetry</h2>
         <div id="seaMaskStatus" class="status">Coastline display mask: not initialized.</div>
         <div id="marineContextStatus" class="status">Rilevamento copertura GEBCO / EMODnet…</div>
-        <div class="data-note" id="seaContextNote">Le isobate EMODnet di CONTESTO (tratteggiate, non analitiche) restano visibili durante e dopo la selezione AOI. Quelle NUMERICHE AOI sono evidenziate e possono essere provvisorie quando la qualità è insufficiente; in tal caso non vengono approvate per l'export né per i predittori. Nessun raster di profondità ridipinge la terra.</div>
-        <div class="field"><label>Sorgente batimetrica / riferimento (terra invariata)</label><select id="bathyMode">
-          <option value="aoi-adaptive">AOI REAL · contesto automatico</option>
-          <option value="chart-relief">Chart Relief · sea-only</option>
-          <option value="emodnet-rainbow">EMODnet Rainbow · sea-only</option>
-          <option value="emodnet-multicolour">EMODnet Multicolour · Europe context</option>
-          <option value="gebco-global">GEBCO 2026 · global context</option>
-          <option value="none">None</option>
+        <div class="data-note" id="seaContextNote">Seleziona la <b>sorgente effettiva</b>, non un tema colore. AUTO mantiene il contesto EMODnet separato; WCS visualizza le isolinee numeriche, WFS le curve pubblicate, GEBCO richiede un GeoTIFF, ENC/Puglia usa i vincoli importati. Nessun raster batimetrico ridipinge la terra.</div>
+        <div class="field"><label for="bathyMode">Sorgente batimetrica attiva (terra indipendente)</label><select id="bathyMode">
+          <option value="aoi-adaptive">AUTO · EMODnet numerico + contesto WFS</option>
+          <option value="emodnet-multicolour">EMODnet · DTM numerico WCS (AOI)</option>
+          <option value="emodnet-rainbow">EMODnet · isobate pubblicate WFS</option>
+          <option value="gebco-global">GEBCO 2026 · DTM GeoTIFF importato</option>
+          <option value="coastal-charts">ENC / Regione Puglia · oggetti idrografici</option>
+          <option value="none">Nessuna batimetria</option>
         </select></div>
+        <div id="selectedBathyDataStatus" class="status">Sorgente effettiva: AUTO · attendere AOI.</div>
+        <div class="field"><label for="gebcoGeotiffFile">GEBCO 2026: importa subset GeoTIFF numerico per la AOI</label>
+          <input id="gebcoGeotiffFile" type="file" accept=".tif,.tiff,image/tiff">
+          <small class="field-note">Scarica una regione da GEBCO e importa il GeoTIFF (EPSG:4326, max 50 MB). Un WMS GEBCO mostra solo immagini e non permette di generare N isobate numeriche.</small>
+          <a target="_blank" rel="noopener noreferrer" href="https://download.gebco.net/">GEBCO Download Tool</a>
+        </div>
+        <div id="gebcoNumericStatus" class="status">GEBCO: importazione del file numerico richiesta; il WMS non è un DTM.</div>
         <div class="field"><label>Opacità griglia numerica (solo debug)</label><input id="depthOpacity" type="range" min="0" max="100" value="72"></div>
         <label class="debug-control"><input id="debugBathymetryGrid" type="checkbox"> Debug numeric grid · engineering only</label>
         <label><input id="contours" type="checkbox" checked> Visualizza isobate (contesto prima dell'AOI, numeriche dopo)</label>
         <div class="field"><label for="contourCount">Numero di isobate richieste (2–30)</label>
           <input id="contourCount" type="number" min="2" max="30" step="1" value="8">
-          <small class="field-note">Con AOI: N soglie adattive tra profondità minima e massima osservate, meno curve se il dato non le supporta. Senza AOI: fino a N livelli vettoriali EMODnet già pubblicati; il fallback WMS mantiene i livelli propri della sorgente.</small>
+          <small class="field-note">AUTO/WCS: N soglie numeriche della AOI. EMODnet WFS: fino a N livelli realmente pubblicati (mai inventati). GEBCO: N soglie dal file numerico importato. ENC: N livelli derivati dal modello cartografico. Il totale effettivo può essere inferiore.</small>
         </div>
         <div class="field"><label>Visualizzazione livelli</label><select id="contourDensity">
           <option value="dense">Tutte le isobate disponibili</option>
@@ -246,41 +254,16 @@ attachPlaceSearch({
 });
 
 function updateMarineContextStatus() {
-  const status = document.querySelector('#marineContextStatus');
-  const contextMode = layers.getContextBathymetry();
-  const currentMode = state.bathyMode === 'aoi-adaptive'
-    ? (contextMode ?? automaticContextBathymetry(map.getCenter())) : state.bathyMode;
-  const description = contextDisplayDescription(currentMode, map.getCenter());
-  const isAutomatic = state.bathyMode === 'aoi-adaptive';
-  status.dataset.failedProvider = '';
-  status.textContent = (isAutomatic ? 'AUTO · ' : '') + description.title +
-    ' · WMS cartografico, non griglia numerica. ' +
-    (isAutomatic ? 'Il riferimento cambia con la posizione; nessun raster colorato viene disegnato.' : 'I raster colorati non sono disegnati nella vista operativa.');
-  status.className = description.status === 'OUTSIDE_REGIONAL_COVERAGE' ? 'status warn' : 'status';
+  const status=document.querySelector('#marineContextStatus');
+  const spec=sourceSpec(state.bathyMode);
+  status.dataset.failedProvider='';
+  status.textContent='SORGENTE SELEZIONATA · '+spec.description+
+    ' · i raster WMS non vengono dipinti sulla terra né spacciati per dati numerici.';
+  status.className='status';
 }
 
 map.on('moveend', updateMarineContextStatus);
 map.on('load', updateMarineContextStatus);
-map.on('sourcedata', event => {
-  if (event.sourceId !== 'bathymetry-fallback-source' &&
-      event.sourceId !== 'bathymetry-source') return;
-  if (event.isSourceLoaded) {
-    const status = document.querySelector('#marineContextStatus');
-    if (status && !status.dataset.failedProvider) {
-      status.dataset.sourceLoaded = '1';
-      updateMarineContextStatus();
-      status.textContent += ' · layer WMS richiesto/caricato (qualità non verificata)';
-    }
-  }
-});
-map.on('error', event => {
-  const detail = String(event?.error?.message ?? '');
-  if (!/gebco\.net|emodnet-bathymetry\.eu|wms.*(error|fail)|source.*(gebco|emodnet)/i.test(detail)) return;
-  const status = document.querySelector('#marineContextStatus');
-  status.dataset.failedProvider = '1';
-  status.className = 'status warn';
-  status.textContent = 'Servizio batimetrico WMS non raggiungibile. Lo sfondo azzurro NON rappresenta la profondità. ' + detail.slice(0, 150);
-});
 const contours = new AdaptiveContours(map, message => {
   document.querySelector('#contourStatus').textContent = message;
 });
@@ -291,6 +274,7 @@ let currentAcousticInventory = null;
 let svpCandidates = [];
 
 function getAoiIsobaths() {
+  if(!localContoursMatchSource(state.bathyMode,state.bathymetryGridSource))return null;
   const summary = state.adaptiveContours;
   if (!state.aoi || !summary || !contourDisplayAssessment(summary).ready) return null;
   const recovery = summary.derivation === 'BOUNDED_DENSER_NUMERIC_RECOVERY';
@@ -783,7 +767,7 @@ setRequestButtons(false);
 renderSpatialAdequacy();
 renderBathymetryBroker();
 subscribeState((next, patch) => {
-  if (['aoi','adaptiveContours','bathymetryGridSource','contourCount'].some(key =>
+  if (['aoi','adaptiveContours','bathymetryGridSource','contourCount','bathyMode','gebcoContoursSummary'].some(key =>
       Object.prototype.hasOwnProperty.call(patch,key))) {
     setTimeout(refreshContourExport,90);
   }
@@ -813,6 +797,7 @@ const experimentWorkspace = attachExperimentWorkspace({
     contour_count: state.contourCount,
     isobaths_geojson: getAoiIsobaths() ?? null,
     ...coastalHydrography.snapshot(),
+    gebco_file_metadata: window.__MSO__?.getGebcoSourceMetadata?.() ?? null,
     bathymetry_opacity: Number(document.querySelector('#depthOpacity').value),
     max_operating_depth_m: Number(document.querySelector('#maxDepth').value),
     selected_assets: [...state.assets],
