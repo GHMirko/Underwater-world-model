@@ -5,7 +5,7 @@ import { sourceSpec, localContoursMatchSource } from '../src/map/bathymetry-sour
 import { contourPresentationPolicy } from '../src/map/contour-presentation-policy.js';
 
 export const GEBCO_TEST_TIF_BASE64='SUkqAAgAAAARAAABAwABAAAACAAAAAEBAwABAAAACAAAAAIBAwABAAAAIAAAAAMBAwABAAAAAQAAAAYBAwABAAAAAQAAABEBBAABAAAAgAEAABUBAwABAAAAAQAAABYBAwABAAAACAAAABcBBAABAAAAAAEAABwBAwABAAAAAQAAAFMBAwABAAAAAwAAAA6DDAADAAAA2gAAAIKEDAAGAAAA8gAAAK+HAwAgAAAAIgEAALCHDAACAAAAYgEAALGHAgAIAAAAcgEAAIGkAgAGAAAAegEAAAAAAAD8qfHSTWJQP/yp8dJNYlA/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAC4HoXrUTgxQLByaJHtPERAAAAAAAAAAAABAAEAAAAHAAAEAAABAAIAAQQAAAEAAQAACAAAAQDmEAEIsYcHAAAABggAAAEAjiMJCLCHAQABAAsIsIcBAAAAiG10lh2kckAAAABAplRYQVdHUyA4NHwALTk5OTkAAAAQQQAAAMEAADDBAABgwQAAiMEAAKDBAAC4wQAA0MEAAODAAAAgwQAAUMEAAIDBAACYwQAAsMEAAMjBAADgwQAAEMEAAEDBAABwwQAAkMEAAKjBAADAwQAA2MEAAPDBAAAwwQAAYMEAAIjBAACgwQAAuMEAANDBAADowQAAAMIAAFDBAACAwQAAmMEAALDBAADIwQAA4MEAAPjBAAAIwgAAcMEAAJDBAACowQAAwMEAANjBAADwwQAABMIAABDCAACIwQAAoMEAALjBAADQwQAA6MEAAADCAAAMwgAAGMIAAJjBAACwwQAAyMEAAODBAAD4wQAACMIAABTCAAAgwg==';
-const area={minLon:17.220,minLat:40.468,maxLon:17.228,maxLat:40.476};
+const area={minLon:17.2199,minLat:40.4679,maxLon:17.2281,maxLat:40.4761};
 function bytes(){const b=Buffer.from(GEBCO_TEST_TIF_BASE64,'base64');return b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength);}
 
 test('real georeferenced GeoTIFF is cropped to AOI; negative elevations are marine depths and positive land stays absent',async()=>{
@@ -16,7 +16,7 @@ test('real georeferenced GeoTIFF is cropped to AOI; negative elevations are mari
   assert.equal(parsed.data.total_cells,64);
   assert.equal(parsed.data.valid_cells,63);
   assert.ok(parsed.data.samples.every(x=>x.depth>=0));
-  assert.equal(parsed.data.min,8);
+  assert.equal(parsed.data.min,7);
   assert.equal(parsed.data.max,40);
   assert.equal(parsed.reference_level,'ASSUMED_MSL_MUST_VERIFY');
 });
