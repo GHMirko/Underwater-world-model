@@ -47,7 +47,7 @@ async function drawAoi(page) {
 }
 
 test('regression: published EMODnet isobaths render BEFORE AOI in Taranto without altering terrain',async({page})=>{
-  await expect(page.locator('.header .badge').first()).toContainText('v0.31');
+  await expect(page.locator('.header .badge').first()).toContainText('v0.32');
   await expect(page.locator('#operatorAoiState')).toHaveText('NON DEFINITA');
   await expect(page.locator('#contourCount')).toHaveValue('8');
   await expect.poll(async()=>page.evaluate(() =>
@@ -103,25 +103,37 @@ test('REGRESSION: selecting AOI keeps published bathymetry on the map while nume
   await expect(page.locator('#mapContourStatus')).toContainText(/CONTESTO EMODnet/i);
 });
 
-test('changing bathymetry selection does not change terrain while published context contours remain visible',async({page})=>{
-  await expect.poll(async()=>page.evaluate(() =>
-    Boolean(window.__MSO__.map.getLayer('adaptive-contours-line'))),{timeout:12000}).toBe(true);
-  for (const mode of ['gebco-global','emodnet-rainbow','emodnet-multicolour','chart-relief','aoi-adaptive']) {
-    await page.locator('#bathyMode').selectOption(mode);
-    await expect.poll(async()=>page.evaluate(() =>
-      Boolean(window.__MSO__.map.getLayer('adaptive-contours-line'))),{timeout:10000}).toBe(true);
-    const result=await page.evaluate(()=>{
-      const m=window.__MSO__.map;
-      return {
-        land:m.getLayoutProperty('land-basemap-minimal','visibility'),
-        ocean:m.getLayer('sea-water-background')?.id ?? null,
-        bathy:m.getLayer('bathymetry-layer') ? m.getLayoutProperty('bathymetry-layer','visibility') : null,
-        fallback:m.getLayer('bathymetry-fallback-layer') ? m.getLayoutProperty('bathymetry-fallback-layer','visibility') : null
-      };
-    });
-    expect(result.land).toBe('visible');
-    expect([null,'none']).toContain(result.bathy);
-    expect([null,'none']).toContain(result.fallback);
-  }
-  await expect(page.locator('#mapContourStatus')).toContainText(/CONTESTO EMODnet/i);
+test('SOURCE REGRESSION: changing selection changes rendered contours and never repaints land',async({page})=>{
+  const mapState=()=>page.evaluate(()=>{
+    const m=window.__MSO__.map;
+    return {
+      emodnetContext:m.getLayer('adaptive-contours-line')
+        ?m.queryRenderedFeatures({layers:['adaptive-contours-line']}).length:0,
+      localNumeric:m.getLayer('aoi-derived-contours-layer')
+        ?m.getLayoutProperty('aoi-derived-contours-layer','visibility'):null,
+      gebcoNumeric:m.getLayer('gebco-numeric-isobaths-layer')
+        ?m.getLayoutProperty('gebco-numeric-isobaths-layer','visibility'):null,
+      land:m.getLayoutProperty('land-basemap-minimal','visibility'),
+      satellite:m.getLayoutProperty('land-basemap-satellite','visibility')
+    };
+  });
+  await expect.poll(async()=> (await mapState()).emodnetContext,{timeout:12000}).toBeGreaterThan(0);
+  await page.locator('#bathyMode').selectOption('emodnet-rainbow');
+  await expect.poll(async()=> (await mapState()).emodnetContext,{timeout:12000}).toBeGreaterThan(0);
+  await expect(page.locator('#selectedBathyDataStatus')).toContainText(/WFS/);
+  await page.locator('#bathyMode').selectOption('gebco-global');
+  await expect.poll(async()=> (await mapState()).emodnetContext,{timeout:12000}).toBe(0);
+  await expect(page.locator('#selectedBathyDataStatus')).toContainText('importare');
+  await expect(page.locator('#mapContourStatus')).toContainText('GEBCO');
+  await page.locator('#bathyMode').selectOption('coastal-charts');
+  await expect(page.locator('#mapContourStatus')).toContainText('ENC/Puglia');
+  await expect.poll(async()=> (await mapState()).emodnetContext,{timeout:10000}).toBe(0);
+  await page.locator('#bathyMode').selectOption('emodnet-multicolour');
+  await expect(page.locator('#selectedBathyDataStatus')).toContainText('WCS');
+  await expect.poll(async()=> (await mapState()).emodnetContext,{timeout:12000}).toBe(0);
+  await page.locator('#bathyMode').selectOption('aoi-adaptive');
+  await expect.poll(async()=> (await mapState()).emodnetContext,{timeout:12000}).toBeGreaterThan(0);
+  const after=await mapState();
+  expect(after.land).toBe('visible');
+  expect(after.satellite).toBe('none');
 });
