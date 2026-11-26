@@ -4,6 +4,7 @@ import { state, patchState, subscribeState } from '../state.js';
 import { setBaseMap, maplibregl } from './map-core.js';
 import { AOI_ADAPTIVE_PALETTE, renderDepthLegend } from './depth-legend.js';
 import { assessBathymetryConfidence, buildAdaptiveContours, chooseContourScheme, contourSummary } from './local-contours.js';
+import { localContoursMatchSource } from './bathymetry-source-policy.js';
 
 const SOURCE_ID = 'aoi-depth-grid-source';
 const LAYER_ID = 'aoi-depth-grid-layer';
@@ -97,7 +98,7 @@ function clearContourMarkers() {
 }
 
 function localContoursVisible() {
-  return state.bathyMode !== 'none' && state.contours;
+  return Boolean(state.aoi) && state.contours && localContoursMatchSource(state.bathyMode,state.bathymetryGridSource);
 }
 
 function ensureLayer(map) {
@@ -320,7 +321,9 @@ function configureClientUi(app) {
   }
   const bathySelect = document.querySelector('#bathyMode');
   if (bathySelect) {
-    bathySelect.innerHTML = `<option value="aoi-adaptive">AOI REAL · isobate numeriche</option><option value="emodnet-multicolour">EMODnet (sorgente, nessun raster sulla terra)</option><option value="emodnet-rainbow">EMODnet Rainbow (solo riferimento)</option><option value="gebco-global">GEBCO (solo riferimento globale)</option><option value="chart-relief">Chart Relief (solo riferimento)</option><option value="none">None</option>`;
+    // Never replace the operator source-selection menu from a secondary controller.
+    if (![...bathySelect.options].some(option=>option.value===state.bathyMode))
+      patchState({bathyMode:'aoi-adaptive'});
     bathySelect.value = state.bathyMode;
   }
   layers.setBathymetry(state.bathyMode);
